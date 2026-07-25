@@ -34,11 +34,17 @@ func Migrate(db *sql.DB, driver string) error {
 // EXISTS" portably, so we run the ALTER and ignore "duplicate column" errors.
 func applyColumnMigrations(db *sql.DB, driver string) error {
 	verifiedType := "INTEGER"
+	phoneType := "TEXT"
+	textType := "TEXT"
 	if driver == "mysql" {
 		verifiedType = "TINYINT"
+		phoneType = "VARCHAR(20)"
+		textType = "VARCHAR(255)"
 	}
 	alters := []string{
 		fmt.Sprintf("ALTER TABLE users ADD COLUMN verified %s NOT NULL DEFAULT 0", verifiedType),
+		fmt.Sprintf("ALTER TABLE users ADD COLUMN phone %s NOT NULL DEFAULT ''", phoneType),
+		fmt.Sprintf("ALTER TABLE users ADD COLUMN google_id %s NOT NULL DEFAULT ''", textType),
 	}
 	for _, stmt := range alters {
 		if _, err := db.Exec(stmt); err != nil {

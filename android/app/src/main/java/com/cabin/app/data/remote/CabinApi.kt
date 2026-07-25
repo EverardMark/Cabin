@@ -1,6 +1,7 @@
 package com.cabin.app.data.remote
 
 import com.cabin.app.data.model.AuthResponse
+import com.cabin.app.data.model.GoogleAuthRequest
 import com.cabin.app.data.model.Listing
 import com.cabin.app.data.model.ListingImage
 import com.cabin.app.data.model.ListingRequest
@@ -34,6 +35,9 @@ interface CabinApi {
 
     @POST("api/v1/auth/login")
     suspend fun login(@Body body: LoginRequest): AuthResponse
+
+    @POST("api/v1/auth/google")
+    suspend fun googleSignIn(@Body body: GoogleAuthRequest): AuthResponse
 
     @GET("api/v1/auth/me")
     suspend fun me(): MeResponse

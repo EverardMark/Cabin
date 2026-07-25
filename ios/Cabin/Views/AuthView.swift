@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import GoogleSignIn
 
 struct AuthView: View {
     @Environment(AppState.self) private var appState
@@ -6,12 +8,13 @@ struct AuthView: View {
     @State private var isRegister = false
     @State private var name = ""
     @State private var email = ""
+    @State private var phone = ""
     @State private var password = ""
     @State private var errorMessage: String?
     @State private var loading = false
 
     private var canSubmit: Bool {
-        !email.isEmpty && password.count >= 6 && (!isRegister || !name.isEmpty)
+        !email.isEmpty && password.count >= 6 && (!isRegister || (!name.isEmpty && Format.isValidPhone(phone)))
     }
 
     var body: some View {
@@ -34,6 +37,19 @@ struct AuthView: View {
                     .textInputAutocapitalization(.never)
                     .autocorrectionDisabled()
                     .textFieldStyle(.roundedBorder)
+                if isRegister {
+                    VStack(alignment: .leading, spacing: 4) {
+                        TextField("Mobile number (e.g. +14155551234)", text: $phone)
+                            .textContentType(.telephoneNumber)
+                            .keyboardType(.phonePad)
+                            .textFieldStyle(.roundedBorder)
+                        if !phone.isEmpty && !Format.isValidPhone(phone) {
+                            Text("Enter your number in international format, e.g. +14155551234")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
                 SecureField("Password", text: $password)
                     .textContentType(isRegister ? .newPassword : .password)
                     .textFieldStyle(.roundedBorder)
@@ -55,6 +71,17 @@ struct AuthView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(!canSubmit || loading)
+
+                Button(action: signInWithGoogle) {
+                    HStack {
+                        Image(systemName: "g.circle.fill")
+                        Text("Continue with Google")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(loading)
 
                 Button(isRegister ? "Already have an account? Log in" : "New here? Create an account") {
                     isRegister.toggle()
@@ -95,7 +122,7 @@ struct AuthView: View {
         Task {
             do {
                 if isRegister {
-                    try await appState.register(name: name, email: email, password: password)
+                    try await appState.register(name: name, email: email, password: password, phone: phone)
                 } else {
                     try await appState.login(email: email, password: password)
                 }
@@ -104,5 +131,55 @@ struct AuthView: View {
             }
             loading = false
         }
+    }
+
+    private func signInWithGoogle() {
+        guard let clientID = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String,
+              !clientID.isEmpty else {
+            errorMessage = "Google sign-in isn't configured yet."
+            return
+        }
+        guard let presenter = UIApplication.shared.topViewController else {
+            errorMessage = "Couldn't present Google sign-in."
+            return
+        }
+        GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
+        loading = true
+        errorMessage = nil
+        GIDSignIn.sharedInstance.signIn(withPresenting: presenter) { result, error in
+            Task { @MainActor in
+                if let error {
+                    errorMessage = error.localizedDescription
+                    loading = false
+                    return
+                }
+                guard let idToken = result?.user.idToken?.tokenString else {
+                    errorMessage = "No Google identity token returned."
+                    loading = false
+                    return
+                }
+                do {
+                    try await appState.loginWithGoogle(idToken: idToken)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+                loading = false
+            }
+        }
+    }
+}
+
+private extension UIApplication {
+    /// The topmost presented view controller of the active window scene.
+    var topViewController: UIViewController? {
+        let keyWindow = connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
+        var top = keyWindow?.rootViewController
+        while let presented = top?.presentedViewController {
+            top = presented
+        }
+        return top
     }
 }

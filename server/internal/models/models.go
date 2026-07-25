@@ -17,7 +17,9 @@ type User struct {
 	ID           string    `json:"id"`
 	Email        string    `json:"email"`
 	Name         string    `json:"name"`
+	Phone        string    `json:"phone"`
 	PasswordHash string    `json:"-"`
+	GoogleID     string    `json:"-"` // Google "sub" for social logins; empty for password accounts
 	Verified     bool      `json:"verified"`
 	CreatedAt    time.Time `json:"created_at"`
 }

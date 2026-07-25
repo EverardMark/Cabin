@@ -5,7 +5,9 @@ CREATE TABLE IF NOT EXISTS users (
     id            VARCHAR(36)  NOT NULL PRIMARY KEY,
     email         VARCHAR(255) NOT NULL UNIQUE,
     name          VARCHAR(255) NOT NULL,
+    phone         VARCHAR(20)  NOT NULL DEFAULT '',
     password_hash VARCHAR(255) NOT NULL,
+    google_id     VARCHAR(255) NOT NULL DEFAULT '',
     verified      TINYINT      NOT NULL DEFAULT 0,
     created_at    VARCHAR(40)  NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

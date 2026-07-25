@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,6 +30,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
@@ -37,15 +39,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cabin.app.ui.common.PrimaryButton
+import com.cabin.app.util.Format
 
 @Composable
 fun AuthScreen(viewModel: AuthViewModel = viewModel()) {
+    val context = LocalContext.current
     var isRegister by rememberSaveable { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf("") }
     var email by rememberSaveable { mutableStateOf("") }
+    var phone by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
 
-    val canSubmit = email.isNotBlank() && password.length >= 6 && (!isRegister || name.isNotBlank())
+    val canSubmit = email.isNotBlank() && password.length >= 6 &&
+        (!isRegister || (name.isNotBlank() && Format.isValidPhone(phone)))
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -107,6 +113,30 @@ fun AuthScreen(viewModel: AuthViewModel = viewModel()) {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             )
 
+            if (isRegister) {
+                val phoneInvalid = phone.isNotBlank() && !Format.isValidPhone(phone)
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it; viewModel.clearError() },
+                    label = { Text("Mobile number") },
+                    placeholder = { Text("+14155551234") },
+                    singleLine = true,
+                    isError = phoneInvalid,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone, imeAction = ImeAction.Next),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                if (phoneInvalid) {
+                    Text(
+                        "Use international format, e.g. +14155551234",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+            }
+
             OutlinedTextField(
                 value = password,
                 onValueChange = { password = it; viewModel.clearError() },
@@ -133,13 +163,23 @@ fun AuthScreen(viewModel: AuthViewModel = viewModel()) {
             PrimaryButton(
                 text = if (isRegister) "Create account" else "Log in",
                 onClick = {
-                    if (isRegister) viewModel.register(name, email, password)
+                    if (isRegister) viewModel.register(name, email, password, phone)
                     else viewModel.login(email, password)
                 },
                 enabled = canSubmit,
                 loading = viewModel.loading,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
             )
+
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(
+                onClick = { viewModel.signInWithGoogle(context) },
+                enabled = !viewModel.loading,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) {
+                Text("Continue with Google", fontWeight = FontWeight.SemiBold)
+            }
 
             TextButton(
                 onClick = { isRegister = !isRegister; viewModel.clearError() },

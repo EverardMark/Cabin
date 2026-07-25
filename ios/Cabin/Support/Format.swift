@@ -50,6 +50,20 @@ enum Format {
         return rel.localizedString(for: date, relativeTo: Date())
     }
 
+    /// Strips common separators, leaving a leading "+" and digits (mirrors the server).
+    static func normalizePhone(_ raw: String) -> String {
+        let separators = CharacterSet(charactersIn: " -()./\t")
+        return raw.trimmingCharacters(in: .whitespaces)
+            .components(separatedBy: separators)
+            .joined()
+    }
+
+    /// True when the input is a valid E.164 mobile number (+ then 8–15 digits).
+    static func isValidPhone(_ raw: String) -> Bool {
+        let phone = normalizePhone(raw)
+        return phone.range(of: #"^\+[1-9]\d{7,14}$"#, options: .regularExpression) != nil
+    }
+
     static func statusLabel(_ status: String) -> String {
         switch status.lowercased() {
         case "sold": return "Sold"

@@ -16,6 +16,7 @@ type registerRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Name     string `json:"name"`
+	Phone    string `json:"phone"`
 }
 
 type loginRequest struct {
@@ -49,6 +50,11 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	phone := normalizePhone(req.Phone)
+	if !validE164(phone) {
+		writeError(w, http.StatusBadRequest, "a valid mobile number in international format is required (e.g. +14155551234)")
+		return
+	}
 
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
@@ -60,6 +66,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		ID:           uuid.NewString(),
 		Email:        req.Email,
 		Name:         req.Name,
+		Phone:        phone,
 		PasswordHash: hash,
 		CreatedAt:    time.Now().UTC(),
 	}
@@ -101,6 +108,91 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, authResponse{Token: token, User: *user})
+}
+
+type googleAuthRequest struct {
+	IDToken string `json:"id_token"`
+}
+
+// handleGoogleAuth signs a user in from a Google ID token. It is disabled
+// (501) until GOOGLE_CLIENT_ID is configured. On success it links or creates a
+// user and issues our own JWT, so the client session flow is identical to
+// email/password login.
+func (s *Server) handleGoogleAuth(w http.ResponseWriter, r *http.Request) {
+	if len(s.cfg.GoogleClientIDs) == 0 {
+		writeError(w, http.StatusNotImplemented, "google sign-in is not configured")
+		return
+	}
+	var req googleAuthRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.IDToken) == "" {
+		writeError(w, http.StatusBadRequest, "id_token is required")
+		return
+	}
+
+	claims, err := auth.VerifyGoogleIDToken(r.Context(), req.IDToken, s.cfg.GoogleClientIDs)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "could not verify Google account")
+		return
+	}
+	if !claims.EmailVerified {
+		writeError(w, http.StatusUnauthorized, "your Google email is not verified")
+		return
+	}
+
+	user, err := s.findOrCreateGoogleUser(claims)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not sign you in")
+		return
+	}
+
+	token, err := s.tokens.Generate(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not issue token")
+		return
+	}
+	writeJSON(w, http.StatusOK, authResponse{Token: token, User: *user})
+}
+
+// findOrCreateGoogleUser resolves the app account for a verified Google
+// identity: (1) an account already linked to this Google id, else (2) an
+// existing account with the same email (which we link), else (3) a new
+// password-less social account.
+func (s *Server) findOrCreateGoogleUser(claims *auth.GoogleClaims) (*models.User, error) {
+	if user, err := s.users.GetByGoogleID(claims.Sub); err == nil {
+		return user, nil
+	} else if err != store.ErrNotFound {
+		return nil, err
+	}
+
+	if user, err := s.users.GetByEmail(claims.Email); err == nil {
+		if linkErr := s.users.SetGoogleID(user.ID, claims.Sub); linkErr != nil {
+			return nil, linkErr
+		}
+		user.GoogleID = claims.Sub
+		return user, nil
+	} else if err != store.ErrNotFound {
+		return nil, err
+	}
+
+	name := claims.Name
+	if name == "" {
+		name = claims.Email
+	}
+	user := &models.User{
+		ID:        uuid.NewString(),
+		Email:     claims.Email,
+		Name:      name,
+		GoogleID:  claims.Sub,
+		CreatedAt: time.Now().UTC(),
+	}
+	if err := s.users.Create(user); err != nil {
+		return nil, err
+	}
+	return user, nil
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {

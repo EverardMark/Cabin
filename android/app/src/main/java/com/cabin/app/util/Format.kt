@@ -47,6 +47,15 @@ object Format {
         }
     }
 
+    private val phoneSeparators = Regex("[\\s\\-().]")
+    private val e164Pattern = Regex("^\\+[1-9]\\d{7,14}$")
+
+    /** Strips common separators, leaving a leading "+" and digits (mirrors the server). */
+    fun normalizePhone(raw: String): String = phoneSeparators.replace(raw.trim(), "")
+
+    /** True when the input is a valid E.164 mobile number (+ then 8-15 digits). */
+    fun isValidPhone(raw: String): Boolean = e164Pattern.matches(normalizePhone(raw))
+
     fun statusLabel(status: String): String = when (status.lowercase(Locale.US)) {
         "sold" -> "Sold"
         "rented" -> "Rented"

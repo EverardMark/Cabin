@@ -32,8 +32,8 @@ func NewUserStore(db *sql.DB) *UserStore {
 // Create inserts a new user. Returns ErrEmailTaken if the email already exists.
 func (s *UserStore) Create(u *models.User) error {
 	_, err := s.db.Exec(
-		`INSERT INTO users (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)`,
-		u.ID, u.Email, u.Name, u.PasswordHash, u.CreatedAt.UTC().Format(time.RFC3339),
+		`INSERT INTO users (id, email, name, phone, password_hash, google_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		u.ID, u.Email, u.Name, u.Phone, u.PasswordHash, u.GoogleID, u.CreatedAt.UTC().Format(time.RFC3339),
 	)
 	if err != nil {
 		// SQLite: "UNIQUE constraint failed"; MySQL: "Error 1062: Duplicate entry".
@@ -49,15 +49,34 @@ func (s *UserStore) Create(u *models.User) error {
 // GetByEmail looks up a user by email (case-sensitive as stored).
 func (s *UserStore) GetByEmail(email string) (*models.User, error) {
 	row := s.db.QueryRow(
-		`SELECT id, email, name, password_hash, verified, created_at FROM users WHERE email = ?`, email)
+		`SELECT id, email, name, phone, password_hash, google_id, verified, created_at FROM users WHERE email = ?`, email)
 	return scanUser(row)
 }
 
 // GetByID looks up a user by id.
 func (s *UserStore) GetByID(id string) (*models.User, error) {
 	row := s.db.QueryRow(
-		`SELECT id, email, name, password_hash, verified, created_at FROM users WHERE id = ?`, id)
+		`SELECT id, email, name, phone, password_hash, google_id, verified, created_at FROM users WHERE id = ?`, id)
 	return scanUser(row)
+}
+
+// GetByGoogleID looks up a user by their linked Google account id ("sub").
+func (s *UserStore) GetByGoogleID(googleID string) (*models.User, error) {
+	row := s.db.QueryRow(
+		`SELECT id, email, name, phone, password_hash, google_id, verified, created_at FROM users WHERE google_id = ?`, googleID)
+	return scanUser(row)
+}
+
+// SetGoogleID links a Google account id to an existing (e.g. password) user.
+func (s *UserStore) SetGoogleID(id, googleID string) error {
+	res, err := s.db.Exec(`UPDATE users SET google_id = ? WHERE id = ?`, googleID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // SetVerified marks (or unmarks) a user as verified.
@@ -87,7 +106,7 @@ func scanUser(sc rowScanner) (*models.User, error) {
 	var u models.User
 	var created string
 	var verified int
-	if err := sc.Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &verified, &created); err != nil {
+	if err := sc.Scan(&u.ID, &u.Email, &u.Name, &u.Phone, &u.PasswordHash, &u.GoogleID, &verified, &created); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}

@@ -53,6 +53,7 @@ func Run(users *store.UserStore, listings *store.ListingStore, reviews *store.Re
 		ID:           uuid.NewString(),
 		Email:        DemoEmail,
 		Name:         "Demo Agent",
+		Phone:        "+14155550142",
 		PasswordHash: hash,
 		CreatedAt:    time.Now().UTC(),
 	}

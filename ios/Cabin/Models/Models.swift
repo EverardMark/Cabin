@@ -4,6 +4,7 @@ struct User: Codable, Identifiable, Hashable {
     let id: String
     let email: String
     let name: String
+    var phone: String = ""
     var verified: Bool = false
     var createdAt: String = ""
 }
@@ -72,6 +73,7 @@ struct RegisterRequest: Encodable {
     let email: String
     let password: String
     let name: String
+    let phone: String
 }
 
 struct LoginRequest: Encodable {

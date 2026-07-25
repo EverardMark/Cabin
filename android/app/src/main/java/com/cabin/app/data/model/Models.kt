@@ -7,6 +7,7 @@ data class User(
     val id: String,
     val email: String,
     val name: String,
+    val phone: String = "",
     val verified: Boolean = false,
     val createdAt: String = "",
 )
@@ -82,7 +83,10 @@ data class ListingsResponse(
 )
 
 @Serializable
-data class RegisterRequest(val email: String, val password: String, val name: String)
+data class RegisterRequest(val email: String, val password: String, val name: String, val phone: String)
+
+@Serializable
+data class GoogleAuthRequest(val idToken: String)
 
 @Serializable
 data class LoginRequest(val email: String, val password: String)

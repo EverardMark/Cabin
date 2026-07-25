@@ -25,14 +25,22 @@ final class AppState {
         currentUser = res.user
     }
 
-    func register(name: String, email: String, password: String) async throws {
+    func register(name: String, email: String, password: String, phone: String) async throws {
         let res = try await api.register(
             RegisterRequest(
                 email: email.trimmingCharacters(in: .whitespaces),
                 password: password,
-                name: name.trimmingCharacters(in: .whitespaces)
+                name: name.trimmingCharacters(in: .whitespaces),
+                phone: Format.normalizePhone(phone)
             )
         )
+        session.save(token: res.token, user: res.user)
+        currentUser = res.user
+    }
+
+    /// Exchanges a Google ID token for a Cabin session (server verifies + links/creates the account).
+    func loginWithGoogle(idToken: String) async throws {
+        let res = try await api.googleSignIn(idToken: idToken)
         session.save(token: res.token, user: res.user)
         currentUser = res.user
     }
