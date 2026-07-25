@@ -14,7 +14,8 @@ var schemaSQLite string
 var schemaMySQL string
 
 // Migrate applies the schema for the given driver. It is idempotent
-// (CREATE ... IF NOT EXISTS), so it is safe to run on every startup.
+// (CREATE ... IF NOT EXISTS + guarded ALTERs), so it is safe to run on every
+// startup, including against an existing database from an earlier version.
 func Migrate(db *sql.DB, driver string) error {
 	schema := schemaSQLite
 	if driver == "mysql" {
@@ -23,6 +24,28 @@ func Migrate(db *sql.DB, driver string) error {
 	for _, stmt := range splitStatements(schema) {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("apply schema statement: %w\n--- statement ---\n%s", err, stmt)
+		}
+	}
+	return applyColumnMigrations(db, driver)
+}
+
+// applyColumnMigrations adds columns introduced after the initial schema to
+// pre-existing tables. Neither SQLite nor MySQL supports "ADD COLUMN IF NOT
+// EXISTS" portably, so we run the ALTER and ignore "duplicate column" errors.
+func applyColumnMigrations(db *sql.DB, driver string) error {
+	verifiedType := "INTEGER"
+	if driver == "mysql" {
+		verifiedType = "TINYINT"
+	}
+	alters := []string{
+		fmt.Sprintf("ALTER TABLE users ADD COLUMN verified %s NOT NULL DEFAULT 0", verifiedType),
+	}
+	for _, stmt := range alters {
+		if _, err := db.Exec(stmt); err != nil {
+			if strings.Contains(strings.ToLower(err.Error()), "duplicate column") {
+				continue // column already exists — fine
+			}
+			return fmt.Errorf("apply column migration: %w\n--- statement ---\n%s", err, stmt)
 		}
 	}
 	return nil

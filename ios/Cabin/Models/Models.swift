@@ -4,6 +4,7 @@ struct User: Codable, Identifiable, Hashable {
     let id: String
     let email: String
     let name: String
+    var verified: Bool = false
     var createdAt: String = ""
 }
 
@@ -11,6 +12,25 @@ struct UserSummary: Codable, Hashable {
     let id: String
     let name: String
     var email: String = ""
+    var verified: Bool = false
+    var ratingAvg: Double = 0
+    var ratingCount: Int = 0
+}
+
+struct Review: Codable, Identifiable, Hashable {
+    let id: String
+    var subjectId: String = ""
+    var authorId: String = ""
+    var authorName: String = ""
+    var rating: Int = 0
+    var comment: String = ""
+    var createdAt: String = ""
+}
+
+struct ReviewsResponse: Codable {
+    var reviews: [Review] = []
+    var ratingAvg: Double = 0
+    var ratingCount: Int = 0
 }
 
 struct ListingImage: Codable, Identifiable, Hashable {
@@ -94,4 +114,13 @@ struct ListingsResponse: Decodable {
 
 struct ServerError: Decodable {
     let error: String
+}
+
+struct VerificationResponse: Decodable {
+    let user: User
+    let status: String
+}
+
+struct StatusResponse: Decodable {
+    let status: String
 }

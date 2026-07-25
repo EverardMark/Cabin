@@ -6,11 +6,15 @@ struct ProfileView: View {
     @State private var listings: [Listing] = []
     @State private var loading = true
     @State private var errorMessage: String?
+    @State private var verifyBusy = false
+    @State private var verifyError: String?
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 header
+
+                verificationSection
 
                 Button(role: .destructive) {
                     appState.logout()
@@ -58,12 +62,55 @@ struct ProfileView: View {
                     .foregroundStyle(.white)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(appState.currentUser?.name ?? "—").font(.title3.weight(.semibold))
+                HStack(spacing: 6) {
+                    Text(appState.currentUser?.name ?? "—").font(.title3.weight(.semibold))
+                    if appState.currentUser?.verified == true { VerifiedBadge() }
+                }
                 Text(appState.currentUser?.email ?? "")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
             Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var verificationSection: some View {
+        if appState.currentUser?.verified == true {
+            Label("Your account is verified", systemImage: "checkmark.seal.fill")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(Color.cabinForest)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(Color.cabinForest.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Get verified", systemImage: "checkmark.seal").font(.headline)
+                Text("Verified owners earn a trust badge and stand out to buyers — the #1 thing surveyed users asked for.")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let verifyError {
+                    Text(verifyError).font(.caption).foregroundStyle(.red)
+                }
+                Button {
+                    Task {
+                        verifyBusy = true
+                        verifyError = nil
+                        do { try await appState.verify() } catch { verifyError = error.localizedDescription }
+                        verifyBusy = false
+                    }
+                } label: {
+                    if verifyBusy {
+                        ProgressView().frame(maxWidth: .infinity)
+                    } else {
+                        Text("Verify my account").frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .disabled(verifyBusy)
+            }
+            .padding(14)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
         }
     }
 

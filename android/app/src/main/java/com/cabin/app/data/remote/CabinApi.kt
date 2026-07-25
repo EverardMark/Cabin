@@ -8,6 +8,13 @@ import com.cabin.app.data.model.ListingsResponse
 import com.cabin.app.data.model.LoginRequest
 import com.cabin.app.data.model.MeResponse
 import com.cabin.app.data.model.RegisterRequest
+import com.cabin.app.data.model.Review
+import com.cabin.app.data.model.ReviewRequest
+import com.cabin.app.data.model.ReviewsResponse
+import com.cabin.app.data.model.ReportRequest
+import com.cabin.app.data.model.StatusRequest
+import com.cabin.app.data.model.StatusResponse
+import com.cabin.app.data.model.VerificationResponse
 import okhttp3.MultipartBody
 import retrofit2.Response
 import retrofit2.http.Body
@@ -62,4 +69,22 @@ interface CabinApi {
     @Multipart
     @POST("api/v1/listings/{id}/images")
     suspend fun uploadImage(@Path("id") id: String, @Part image: MultipartBody.Part): ListingImage
+
+    // Trust: verification, reviews, reports, availability status
+
+    @POST("api/v1/me/verification")
+    suspend fun requestVerification(): VerificationResponse
+
+    @GET("api/v1/users/{id}/reviews")
+    suspend fun reviews(@Path("id") id: String): ReviewsResponse
+
+    @POST("api/v1/users/{id}/reviews")
+    suspend fun addReview(@Path("id") id: String, @Body body: ReviewRequest): Review
+
+    @POST("api/v1/listings/{id}/report")
+    suspend fun reportListing(@Path("id") id: String, @Body body: ReportRequest): StatusResponse
+
+    /** Partial update of just the availability status (server merges onto the existing listing). */
+    @PUT("api/v1/listings/{id}")
+    suspend fun updateListingStatus(@Path("id") id: String, @Body body: StatusRequest): Listing
 }

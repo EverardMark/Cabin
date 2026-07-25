@@ -49,6 +49,12 @@ class SessionStore(private val context: Context) {
         }
     }
 
+    /** Updates the cached user (e.g. after verification) without touching the token. */
+    suspend fun updateUser(user: User) {
+        cachedUser = user
+        context.dataStore.edit { it[userKey] = CabinJson.encodeToString(user) }
+    }
+
     suspend fun clear() {
         currentToken = null
         cachedUser = null

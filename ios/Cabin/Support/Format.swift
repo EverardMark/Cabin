@@ -36,6 +36,30 @@ enum Format {
         return first.uppercased() + text.dropFirst()
     }
 
+    private static let iso: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime]
+        return f
+    }()
+
+    /// "Updated 3 days ago" style relative time from an RFC3339 string.
+    static func relativeTime(_ rfc3339: String) -> String? {
+        guard let date = iso.date(from: rfc3339) else { return nil }
+        let rel = RelativeDateTimeFormatter()
+        rel.unitsStyle = .full
+        return rel.localizedString(for: date, relativeTo: Date())
+    }
+
+    static func statusLabel(_ status: String) -> String {
+        switch status.lowercased() {
+        case "sold": return "Sold"
+        case "rented": return "Rented"
+        case "pending": return "Pending"
+        case "inactive": return "Inactive"
+        default: return "Active"
+        }
+    }
+
     /// Resolves a relative ("/uploads/x.jpg") or absolute image URL.
     static func imageURL(_ raw: String) -> URL? {
         if raw.hasPrefix("http://") || raw.hasPrefix("https://") {

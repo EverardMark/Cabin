@@ -9,20 +9,39 @@ var (
 	Statuses      = []string{"active", "pending", "sold", "rented", "inactive"}
 )
 
+// ReportReasons are the allowed reasons for reporting a listing.
+var ReportReasons = []string{"scam", "fake_or_misleading", "already_unavailable", "wrong_price", "duplicate", "offensive", "other"}
+
 // User is a registered account. PasswordHash is never serialized to JSON.
 type User struct {
 	ID           string    `json:"id"`
 	Email        string    `json:"email"`
 	Name         string    `json:"name"`
 	PasswordHash string    `json:"-"`
+	Verified     bool      `json:"verified"`
 	CreatedAt    time.Time `json:"created_at"`
 }
 
 // UserSummary is the public subset of a user, embedded in listings.
+// It carries the trust signals surfaced in the UI: verified badge + rating.
 type UserSummary struct {
-	ID    string `json:"id"`
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	ID          string  `json:"id"`
+	Name        string  `json:"name"`
+	Email       string  `json:"email"`
+	Verified    bool    `json:"verified"`
+	RatingAvg   float64 `json:"rating_avg"`
+	RatingCount int     `json:"rating_count"`
+}
+
+// Review is a rating + comment left for a user (owner/agent) by another user.
+type Review struct {
+	ID         string    `json:"id"`
+	SubjectID  string    `json:"subject_id"`
+	AuthorID   string    `json:"author_id"`
+	AuthorName string    `json:"author_name"`
+	Rating     int       `json:"rating"` // 1..5
+	Comment    string    `json:"comment"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 // Listing is a real estate posting.
@@ -62,5 +81,5 @@ type ListingImage struct {
 
 // Summary returns the public view of the user.
 func (u *User) Summary() UserSummary {
-	return UserSummary{ID: u.ID, Name: u.Name, Email: u.Email}
+	return UserSummary{ID: u.ID, Name: u.Name, Email: u.Email, Verified: u.Verified}
 }

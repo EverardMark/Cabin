@@ -138,6 +138,20 @@ struct ListingCard: View {
                     )
                     .padding(10)
                 }
+                .overlay(alignment: .topLeading) {
+                    if listing.owner?.verified == true {
+                        HStack(spacing: 3) {
+                            Image(systemName: "checkmark.seal.fill")
+                            Text("Verified")
+                        }
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.cabinForest, in: Capsule())
+                        .padding(10)
+                    }
+                }
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(listing.title).font(.headline).lineLimit(1)
@@ -150,6 +164,10 @@ struct ListingCard: View {
                     Text(Format.baths(listing.bathrooms))
                     Text("•").foregroundStyle(.secondary)
                     Text(Format.area(listing.areaSqft))
+                    Spacer()
+                    if let owner = listing.owner, owner.ratingCount > 0 {
+                        RatingStars(avg: owner.ratingAvg, count: owner.ratingCount, showCount: false)
+                    }
                 }
                 .font(.subheadline.weight(.medium))
                 .padding(.top, 2)

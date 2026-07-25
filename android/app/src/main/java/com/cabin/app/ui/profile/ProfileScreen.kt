@@ -13,8 +13,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -28,6 +30,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cabin.app.ui.common.PrimaryButton
+import com.cabin.app.ui.common.VerifiedBadge
 import com.cabin.app.ui.listings.ListingCard
 
 @Composable
@@ -57,7 +61,13 @@ fun ProfileScreen(
                 }
                 Spacer(Modifier.size(14.dp))
                 Column {
-                    Text(user?.name ?: "—", style = MaterialTheme.typography.titleLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(user?.name ?: "—", style = MaterialTheme.typography.titleLarge)
+                        if (user?.verified == true) {
+                            Spacer(Modifier.size(6.dp))
+                            VerifiedBadge()
+                        }
+                    }
                     Text(
                         user?.email ?: "",
                         style = MaterialTheme.typography.bodyMedium,
@@ -65,6 +75,14 @@ fun ProfileScreen(
                     )
                 }
             }
+
+            VerificationSection(
+                verified = user?.verified == true,
+                verifying = state.verifying,
+                error = state.verifyError,
+                onVerify = viewModel::verify,
+            )
+
             OutlinedButton(
                 onClick = viewModel::logout,
                 modifier = Modifier.fillMaxWidth(),
@@ -96,6 +114,77 @@ fun ProfileScreen(
             }
             else -> items(state.listings, key = { it.id }) { listing ->
                 ListingCard(listing = listing, onClick = { onOpenListing(listing.id) })
+            }
+        }
+    }
+}
+
+@Composable
+private fun VerificationSection(
+    verified: Boolean,
+    verifying: Boolean,
+    error: String?,
+    onVerify: () -> Unit,
+) {
+    if (verified) {
+        Surface(
+            shape = RoundedCornerShape(12.dp),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.Verified,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.size(8.dp))
+                Text(
+                    "Your account is verified",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    } else {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Filled.Verified,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Spacer(Modifier.size(6.dp))
+                    Text("Get verified", style = MaterialTheme.typography.titleMedium)
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "Verified owners earn a trust badge and stand out to buyers — the #1 thing surveyed users asked for.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                )
+                if (error != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(error, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
+                Spacer(Modifier.height(10.dp))
+                PrimaryButton(
+                    text = "Verify my account",
+                    onClick = onVerify,
+                    loading = verifying,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                )
             }
         }
     }

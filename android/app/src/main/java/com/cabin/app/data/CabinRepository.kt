@@ -5,6 +5,11 @@ import com.cabin.app.data.model.ListingImage
 import com.cabin.app.data.model.ListingRequest
 import com.cabin.app.data.model.LoginRequest
 import com.cabin.app.data.model.RegisterRequest
+import com.cabin.app.data.model.Review
+import com.cabin.app.data.model.ReviewRequest
+import com.cabin.app.data.model.ReviewsResponse
+import com.cabin.app.data.model.ReportRequest
+import com.cabin.app.data.model.StatusRequest
 import com.cabin.app.data.model.User
 import com.cabin.app.data.remote.CabinApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,6 +78,30 @@ class CabinRepository(
     }
 
     suspend fun myListings(): Result<List<Listing>> = runCatching { api.myListings().listings }
+
+    /** Requests verification for the current user and updates cached state. */
+    suspend fun requestVerification(): Result<User> = runCatching {
+        val res = api.requestVerification()
+        session.updateUser(res.user)
+        _user.value = res.user
+        res.user
+    }
+
+    suspend fun reviews(userId: String): Result<ReviewsResponse> = runCatching { api.reviews(userId) }
+
+    suspend fun addReview(userId: String, rating: Int, comment: String): Result<Review> = runCatching {
+        api.addReview(userId, ReviewRequest(rating, comment.trim()))
+    }
+
+    suspend fun reportListing(listingId: String, reason: String, detail: String): Result<Unit> = runCatching {
+        api.reportListing(listingId, ReportRequest(reason, detail.trim()))
+        Unit
+    }
+
+    /** Marks a listing sold/rented/etc. via a partial update (only the owner may do this). */
+    suspend fun updateListingStatus(id: String, status: String): Result<Listing> = runCatching {
+        api.updateListingStatus(id, StatusRequest(status))
+    }
 
     suspend fun uploadImage(listingId: String, file: File): Result<ListingImage> = runCatching {
         val mime = when (file.extension.lowercase()) {

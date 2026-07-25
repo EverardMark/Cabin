@@ -7,6 +7,7 @@ data class User(
     val id: String,
     val email: String,
     val name: String,
+    val verified: Boolean = false,
     val createdAt: String = "",
 )
 
@@ -15,6 +16,20 @@ data class UserSummary(
     val id: String,
     val name: String,
     val email: String = "",
+    val verified: Boolean = false,
+    val ratingAvg: Double = 0.0,
+    val ratingCount: Int = 0,
+)
+
+@Serializable
+data class Review(
+    val id: String,
+    val subjectId: String = "",
+    val authorId: String = "",
+    val authorName: String = "",
+    val rating: Int = 0,
+    val comment: String = "",
+    val createdAt: String = "",
 )
 
 @Serializable
@@ -88,3 +103,26 @@ data class ListingRequest(
     val zipCode: String,
     val status: String? = null,
 )
+
+@Serializable
+data class ReviewsResponse(
+    val reviews: List<Review> = emptyList(),
+    val ratingAvg: Double = 0.0,
+    val ratingCount: Int = 0,
+)
+
+@Serializable
+data class ReviewRequest(val rating: Int, val comment: String)
+
+@Serializable
+data class ReportRequest(val reason: String, val detail: String)
+
+/** Partial listing update carrying only the availability status. */
+@Serializable
+data class StatusRequest(val status: String)
+
+@Serializable
+data class VerificationResponse(val user: User, val status: String)
+
+@Serializable
+data class StatusResponse(val status: String)

@@ -82,8 +82,38 @@ final class APIClient {
         try await send("api/v1/listings", method: "POST", body: body, authorized: true)
     }
 
+    /// Partial update of just the availability status (server merges onto the existing listing).
+    @discardableResult
+    func updateListingStatus(id: String, status: String) async throws -> Listing {
+        struct Body: Encodable { let status: String }
+        return try await send("api/v1/listings/\(id)", method: "PUT", body: Body(status: status), authorized: true)
+    }
+
     func myListings() async throws -> ListingsResponse {
         try await send("api/v1/me/listings", authorized: true)
+    }
+
+    // MARK: Trust
+
+    func requestVerification() async throws -> VerificationResponse {
+        try await send("api/v1/me/verification", method: "POST", authorized: true)
+    }
+
+    func reviews(userId: String) async throws -> ReviewsResponse {
+        try await send("api/v1/users/\(userId)/reviews")
+    }
+
+    @discardableResult
+    func addReview(userId: String, rating: Int, comment: String) async throws -> Review {
+        struct Body: Encodable { let rating: Int; let comment: String }
+        return try await send("api/v1/users/\(userId)/reviews", method: "POST",
+                              body: Body(rating: rating, comment: comment), authorized: true)
+    }
+
+    func report(listingId: String, reason: String, detail: String) async throws {
+        struct Body: Encodable { let reason: String; let detail: String }
+        let _: StatusResponse = try await send("api/v1/listings/\(listingId)/report", method: "POST",
+                                               body: Body(reason: reason, detail: detail), authorized: true)
     }
 
     @discardableResult

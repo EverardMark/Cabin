@@ -6,6 +6,7 @@ CREATE TABLE IF NOT EXISTS users (
     email         VARCHAR(255) NOT NULL UNIQUE,
     name          VARCHAR(255) NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    verified      TINYINT      NOT NULL DEFAULT 0,
     created_at    VARCHAR(40)  NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -45,4 +46,29 @@ CREATE TABLE IF NOT EXISTS listing_images (
     created_at VARCHAR(40) NOT NULL,
     CONSTRAINT fk_images_listing FOREIGN KEY (listing_id) REFERENCES listings(id) ON DELETE CASCADE,
     INDEX idx_listing_images_listing_id (listing_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS reviews (
+    id              VARCHAR(36) NOT NULL PRIMARY KEY,
+    subject_user_id VARCHAR(36) NOT NULL,
+    author_user_id  VARCHAR(36) NOT NULL,
+    rating          INT         NOT NULL,
+    comment         TEXT        NOT NULL,
+    created_at      VARCHAR(40) NOT NULL,
+    CONSTRAINT fk_reviews_subject FOREIGN KEY (subject_user_id) REFERENCES users(id) ON DELETE CASCADE,
+    CONSTRAINT fk_reviews_author  FOREIGN KEY (author_user_id)  REFERENCES users(id) ON DELETE CASCADE,
+    UNIQUE KEY uq_reviews_subject_author (subject_user_id, author_user_id),
+    INDEX idx_reviews_subject (subject_user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS reports (
+    id               VARCHAR(36) NOT NULL PRIMARY KEY,
+    listing_id       VARCHAR(36) NOT NULL,
+    reporter_user_id VARCHAR(36) NOT NULL,
+    reason           VARCHAR(40) NOT NULL,
+    detail           TEXT        NOT NULL,
+    created_at       VARCHAR(40) NOT NULL,
+    CONSTRAINT fk_reports_listing  FOREIGN KEY (listing_id)       REFERENCES listings(id) ON DELETE CASCADE,
+    CONSTRAINT fk_reports_reporter FOREIGN KEY (reporter_user_id) REFERENCES users(id)    ON DELETE CASCADE,
+    INDEX idx_reports_listing (listing_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

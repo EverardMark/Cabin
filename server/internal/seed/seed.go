@@ -36,7 +36,7 @@ type sampleListing struct {
 
 // Run seeds a demo account and sample listings when the database has no users.
 // It is a no-op if any users already exist.
-func Run(users *store.UserStore, listings *store.ListingStore) error {
+func Run(users *store.UserStore, listings *store.ListingStore, reviews *store.ReviewStore) error {
 	count, err := users.Count()
 	if err != nil {
 		return err
@@ -58,6 +58,38 @@ func Run(users *store.UserStore, listings *store.ListingStore) error {
 	}
 	if err := users.Create(demo); err != nil {
 		return err
+	}
+	// The demo owner is a verified account (so the trust badge is visible).
+	_ = users.SetVerified(demo.ID, true)
+
+	// Seed a few reviewer accounts + reviews so the owner has a real rating.
+	reviewers := []struct {
+		name, email string
+		rating      int
+		comment     string
+	}{
+		{"Maria Santos", "maria@cabin.app", 5, "Verified listing, super responsive, and the unit matched the photos exactly."},
+		{"James Cruz", "james@cabin.app", 4, "Smooth viewing schedule and honest pricing — no PM-for-price games."},
+		{"Aisha Reyes", "aisha@cabin.app", 5, "No hidden fees and the owner is legit. Refreshing compared to Facebook listings."},
+	}
+	for _, rv := range reviewers {
+		u := &models.User{
+			ID:           uuid.NewString(),
+			Email:        rv.email,
+			Name:         rv.name,
+			PasswordHash: hash,
+			CreatedAt:    time.Now().UTC(),
+		}
+		if err := users.Create(u); err != nil {
+			continue
+		}
+		_ = reviews.Add(&models.Review{
+			ID:        uuid.NewString(),
+			SubjectID: demo.ID,
+			AuthorID:  u.ID,
+			Rating:    rv.rating,
+			Comment:   rv.comment,
+		})
 	}
 
 	for _, sm := range samples() {

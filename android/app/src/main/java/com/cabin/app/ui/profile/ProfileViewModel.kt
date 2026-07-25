@@ -16,6 +16,8 @@ data class ProfileUiState(
     val loading: Boolean = true,
     val listings: List<Listing> = emptyList(),
     val error: String? = null,
+    val verifying: Boolean = false,
+    val verifyError: String? = null,
 )
 
 class ProfileViewModel : ViewModel() {
@@ -36,6 +38,17 @@ class ProfileViewModel : ViewModel() {
             repo.myListings().fold(
                 onSuccess = { list -> _state.update { it.copy(loading = false, listings = list) } },
                 onFailure = { e -> _state.update { it.copy(loading = false, error = e.userMessage()) } },
+            )
+        }
+    }
+
+    /** Requests verification for the current user; the badge appears via [user] on success. */
+    fun verify() {
+        _state.update { it.copy(verifying = true, verifyError = null) }
+        viewModelScope.launch {
+            repo.requestVerification().fold(
+                onSuccess = { _state.update { it.copy(verifying = false) } },
+                onFailure = { e -> _state.update { it.copy(verifying = false, verifyError = e.userMessage()) } },
             )
         }
     }

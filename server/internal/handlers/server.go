@@ -17,6 +17,7 @@ type Server struct {
 	cfg      *config.Config
 	users    *store.UserStore
 	listings *store.ListingStore
+	reviews  *store.ReviewStore
 	tokens   *auth.TokenService
 	uploads  *storage.LocalStorage
 }
@@ -25,10 +26,11 @@ func NewServer(
 	cfg *config.Config,
 	users *store.UserStore,
 	listings *store.ListingStore,
+	reviews *store.ReviewStore,
 	tokens *auth.TokenService,
 	uploads *storage.LocalStorage,
 ) *Server {
-	return &Server{cfg: cfg, users: users, listings: listings, tokens: tokens, uploads: uploads}
+	return &Server{cfg: cfg, users: users, listings: listings, reviews: reviews, tokens: tokens, uploads: uploads}
 }
 
 // Handler builds the full HTTP handler with routes and middleware.
@@ -54,6 +56,13 @@ func (s *Server) Handler() http.Handler {
 
 	// Current user's listings
 	mux.Handle("GET /api/v1/me/listings", s.requireAuth(http.HandlerFunc(s.handleMyListings)))
+
+	// Trust: verification, public profiles, reviews, reports
+	mux.Handle("POST /api/v1/me/verification", s.requireAuth(http.HandlerFunc(s.handleRequestVerification)))
+	mux.HandleFunc("GET /api/v1/users/{id}", s.handleGetUser)
+	mux.HandleFunc("GET /api/v1/users/{id}/reviews", s.handleListReviews)
+	mux.Handle("POST /api/v1/users/{id}/reviews", s.requireAuth(http.HandlerFunc(s.handleCreateReview)))
+	mux.Handle("POST /api/v1/listings/{id}/report", s.requireAuth(http.HandlerFunc(s.handleReportListing)))
 
 	// Uploaded images
 	fileServer := http.FileServer(http.Dir(s.cfg.UploadDir))

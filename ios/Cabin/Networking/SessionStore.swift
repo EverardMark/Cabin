@@ -64,6 +64,14 @@ final class SessionStore {
         }
     }
 
+    /// Updates the cached user (e.g. after verification) without touching the token.
+    func updateUser(_ user: User) {
+        self.user = user
+        if let data = try? JSONEncoder().encode(user) {
+            UserDefaults.standard.set(data, forKey: userKey)
+        }
+    }
+
     func clear() {
         token = nil
         user = nil

@@ -37,6 +37,13 @@ final class AppState {
         currentUser = res.user
     }
 
+    /// Requests verification for the current user and updates local state.
+    func verify() async throws {
+        let res = try await api.requestVerification()
+        currentUser = res.user
+        session.updateUser(res.user)
+    }
+
     func logout() {
         session.clear()
         currentUser = nil

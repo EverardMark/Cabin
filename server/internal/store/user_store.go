@@ -49,15 +49,31 @@ func (s *UserStore) Create(u *models.User) error {
 // GetByEmail looks up a user by email (case-sensitive as stored).
 func (s *UserStore) GetByEmail(email string) (*models.User, error) {
 	row := s.db.QueryRow(
-		`SELECT id, email, name, password_hash, created_at FROM users WHERE email = ?`, email)
+		`SELECT id, email, name, password_hash, verified, created_at FROM users WHERE email = ?`, email)
 	return scanUser(row)
 }
 
 // GetByID looks up a user by id.
 func (s *UserStore) GetByID(id string) (*models.User, error) {
 	row := s.db.QueryRow(
-		`SELECT id, email, name, password_hash, created_at FROM users WHERE id = ?`, id)
+		`SELECT id, email, name, password_hash, verified, created_at FROM users WHERE id = ?`, id)
 	return scanUser(row)
+}
+
+// SetVerified marks (or unmarks) a user as verified.
+func (s *UserStore) SetVerified(id string, verified bool) error {
+	v := 0
+	if verified {
+		v = 1
+	}
+	res, err := s.db.Exec(`UPDATE users SET verified = ? WHERE id = ?`, v, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 // Count returns the number of users (used to decide whether to seed).
@@ -70,12 +86,14 @@ func (s *UserStore) Count() (int, error) {
 func scanUser(sc rowScanner) (*models.User, error) {
 	var u models.User
 	var created string
-	if err := sc.Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &created); err != nil {
+	var verified int
+	if err := sc.Scan(&u.ID, &u.Email, &u.Name, &u.PasswordHash, &verified, &created); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNotFound
 		}
 		return nil, err
 	}
+	u.Verified = verified != 0
 	u.CreatedAt, _ = time.Parse(time.RFC3339, created)
 	return &u, nil
 }

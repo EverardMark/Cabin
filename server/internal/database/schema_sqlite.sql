@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     email         TEXT NOT NULL UNIQUE,
     name          TEXT NOT NULL,
     password_hash TEXT NOT NULL,
+    verified      INTEGER NOT NULL DEFAULT 0,
     created_at    TEXT NOT NULL
 );
 
@@ -45,3 +46,26 @@ CREATE TABLE IF NOT EXISTS listing_images (
 );
 
 CREATE INDEX IF NOT EXISTS idx_listing_images_listing_id ON listing_images(listing_id);
+
+CREATE TABLE IF NOT EXISTS reviews (
+    id              TEXT PRIMARY KEY,
+    subject_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    author_user_id  TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    rating          INTEGER NOT NULL,
+    comment         TEXT NOT NULL DEFAULT '',
+    created_at      TEXT NOT NULL,
+    UNIQUE (subject_user_id, author_user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_reviews_subject ON reviews(subject_user_id);
+
+CREATE TABLE IF NOT EXISTS reports (
+    id               TEXT PRIMARY KEY,
+    listing_id       TEXT NOT NULL REFERENCES listings(id) ON DELETE CASCADE,
+    reporter_user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reason           TEXT NOT NULL,
+    detail           TEXT NOT NULL DEFAULT '',
+    created_at       TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_listing ON reports(listing_id);

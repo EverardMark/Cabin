@@ -1,7 +1,10 @@
 package com.cabin.app.util
 
+import android.text.format.DateUtils
 import com.cabin.app.BuildConfig
 import java.text.NumberFormat
+import java.time.OffsetDateTime
+import java.time.format.DateTimeParseException
 import java.util.Locale
 
 object Format {
@@ -28,6 +31,29 @@ object Format {
     }
 
     fun area(sqft: Int): String = if (sqft <= 0) "—" else "${"%,d".format(sqft)} sqft"
+
+    /** "3 days ago" style relative time from an RFC3339 string, or null if unparseable. */
+    fun relativeTime(rfc3339: String): String? {
+        if (rfc3339.isBlank()) return null
+        return try {
+            val millis = OffsetDateTime.parse(rfc3339).toInstant().toEpochMilli()
+            DateUtils.getRelativeTimeSpanString(
+                millis,
+                System.currentTimeMillis(),
+                DateUtils.MINUTE_IN_MILLIS,
+            ).toString()
+        } catch (e: DateTimeParseException) {
+            null
+        }
+    }
+
+    fun statusLabel(status: String): String = when (status.lowercase(Locale.US)) {
+        "sold" -> "Sold"
+        "rented" -> "Rented"
+        "pending" -> "Pending"
+        "inactive" -> "Inactive"
+        else -> "Active"
+    }
 
     /** Resolves a possibly-relative image URL (e.g. "/uploads/x.jpg") to an absolute URL. */
     fun imageUrl(url: String): String {

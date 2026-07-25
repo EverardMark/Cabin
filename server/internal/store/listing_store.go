@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"math"
 	"strings"
 	"time"
 
@@ -33,11 +34,14 @@ type ListingFilter struct {
 	PageSize     int
 }
 
-// listingColumns is the shared SELECT list joining the owner's public fields.
+// listingColumns is the shared SELECT list joining the owner's public fields
+// plus the owner's trust signals (verified flag + aggregate rating).
 const listingColumns = `l.id, l.user_id, l.title, l.description, l.price, l.currency,
 	l.property_type, l.listing_type, l.bedrooms, l.bathrooms, l.area_sqft,
 	l.address, l.city, l.state, l.zip_code, l.latitude, l.longitude, l.status,
-	l.created_at, l.updated_at, u.name, u.email`
+	l.created_at, l.updated_at, u.name, u.email, u.verified,
+	(SELECT COUNT(*) FROM reviews rv WHERE rv.subject_user_id = l.user_id),
+	(SELECT AVG(rv.rating) FROM reviews rv WHERE rv.subject_user_id = l.user_id)`
 
 // Create inserts a new listing, stamping created/updated timestamps.
 func (s *ListingStore) Create(l *models.Listing) error {
@@ -243,6 +247,15 @@ func (s *ListingStore) Count() (int, error) {
 	return n, err
 }
 
+// AddReport records a user's report of a listing (anti-scam / moderation).
+func (s *ListingStore) AddReport(id, listingID, reporterID, reason, detail string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO reports (id, listing_id, reporter_user_id, reason, detail, created_at) VALUES (?,?,?,?,?,?)`,
+		id, listingID, reporterID, reason, detail, time.Now().UTC().Format(time.RFC3339),
+	)
+	return err
+}
+
 // imagesFor returns images grouped by listing id, in one query to avoid N+1.
 func (s *ListingStore) imagesFor(ids []string) (map[string][]models.ListingImage, error) {
 	result := map[string][]models.ListingImage{}
@@ -281,14 +294,15 @@ func (s *ListingStore) imagesFor(ids []string) (map[string][]models.ListingImage
 
 func scanListing(sc rowScanner) (*models.Listing, error) {
 	var l models.Listing
-	var lat, lng sql.NullFloat64
+	var lat, lng, ratingAvg sql.NullFloat64
 	var created, updated, ownerName, ownerEmail string
+	var ownerVerified, ratingCount int
 
 	err := sc.Scan(
 		&l.ID, &l.UserID, &l.Title, &l.Description, &l.Price, &l.Currency,
 		&l.PropertyType, &l.ListingType, &l.Bedrooms, &l.Bathrooms, &l.AreaSqft,
 		&l.Address, &l.City, &l.State, &l.ZipCode, &lat, &lng, &l.Status,
-		&created, &updated, &ownerName, &ownerEmail,
+		&created, &updated, &ownerName, &ownerEmail, &ownerVerified, &ratingCount, &ratingAvg,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -307,7 +321,19 @@ func scanListing(sc rowScanner) (*models.Listing, error) {
 	}
 	l.CreatedAt, _ = time.Parse(time.RFC3339, created)
 	l.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
-	l.Owner = &models.UserSummary{ID: l.UserID, Name: ownerName, Email: ownerEmail}
+
+	avg := 0.0
+	if ratingAvg.Valid {
+		avg = math.Round(ratingAvg.Float64*10) / 10
+	}
+	l.Owner = &models.UserSummary{
+		ID:          l.UserID,
+		Name:        ownerName,
+		Email:       ownerEmail,
+		Verified:    ownerVerified != 0,
+		RatingAvg:   avg,
+		RatingCount: ratingCount,
+	}
 	l.Images = []models.ListingImage{}
 	return &l, nil
 }
