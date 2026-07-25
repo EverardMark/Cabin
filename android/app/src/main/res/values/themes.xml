@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Host theme applied before Compose takes over. Compose draws the
+         Material 3 UI on top, so this only needs sane window defaults. -->
+    <style name="Theme.Cabin" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/surface</item>
+        <item name="android:statusBarColor">@color/ic_launcher_background</item>
+        <item name="android:windowLightStatusBar">false</item>
+    </style>
+</resources>

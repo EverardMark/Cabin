@@ -1,0 +1,16 @@
+# Binaries
+/bin/
+cabin
+api
+
+# Database & uploads (local runtime data)
+*.db
+*.db-shm
+*.db-wal
+/uploads/
+
+# Env
+.env
+
+# OS
+.DS_Store
