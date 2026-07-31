@@ -113,6 +113,18 @@ func (s *Server) handleGetListing(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateListing(w http.ResponseWriter, r *http.Request) {
+	// Only agent accounts may post listings.
+	uid := userIDFrom(r.Context())
+	user, err := s.users.GetByID(uid)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "account not found")
+		return
+	}
+	if !user.IsAgent() {
+		writeError(w, http.StatusForbidden, "only agent accounts can post listings")
+		return
+	}
+
 	var in listingInput
 	if err := decodeJSON(w, r, &in); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -121,7 +133,7 @@ func (s *Server) handleCreateListing(w http.ResponseWriter, r *http.Request) {
 
 	l := &models.Listing{
 		ID:           uuid.NewString(),
-		UserID:       userIDFrom(r.Context()),
+		UserID:       uid,
 		Currency:     "USD",
 		PropertyType: "house",
 		ListingType:  "sale",

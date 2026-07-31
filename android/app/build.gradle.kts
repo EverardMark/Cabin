@@ -22,6 +22,10 @@ android {
         // 10.0.2.2 is the Android emulator's alias for the host machine's localhost.
         // For a physical device, replace with your computer's LAN IP (e.g. http://192.168.1.20:8080/).
         buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
+
+        // Google "Web" OAuth client ID, used as the serverClientId for Sign in with Google.
+        // Leave empty to keep Google sign-in disabled; paste your Web client ID to enable it.
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
     }
 
     buildTypes {
@@ -70,4 +74,9 @@ dependencies {
     implementation(libs.okhttp.logging)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.datastore.preferences)
+
+    // Sign in with Google (Credential Manager + Google Identity)
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services.auth)
+    implementation(libs.google.identity.googleid)
 }

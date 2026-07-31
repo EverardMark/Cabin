@@ -28,7 +28,9 @@ struct ProfileView: View {
                 } else if let errorMessage {
                     Text(errorMessage).foregroundStyle(.red)
                 } else if listings.isEmpty {
-                    Text("You haven't posted any listings yet. Tap Post to add your first one.")
+                    Text(appState.currentUser?.isAgent == true
+                         ? "You haven't posted any listings yet. Tap Post to add your first one."
+                         : "Only agent accounts can post listings. Register as an agent to start posting.")
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(listings) { listing in
@@ -58,7 +60,10 @@ struct ProfileView: View {
                     .foregroundStyle(.white)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(appState.currentUser?.name ?? "—").font(.title3.weight(.semibold))
+                HStack(spacing: 6) {
+                    Text(appState.currentUser?.name ?? "—").font(.title3.weight(.semibold))
+                    if appState.currentUser?.isAgent == true { AgentBadge() }
+                }
                 Text(appState.currentUser?.email ?? "")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)

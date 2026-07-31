@@ -1,5 +1,6 @@
 package com.cabin.app.data
 
+import com.cabin.app.data.model.GoogleAuthRequest
 import com.cabin.app.data.model.Listing
 import com.cabin.app.data.model.ListingImage
 import com.cabin.app.data.model.ListingRequest
@@ -39,8 +40,16 @@ class CabinRepository(
         res.user
     }
 
-    suspend fun register(name: String, email: String, password: String): Result<User> = runCatching {
-        val res = api.register(RegisterRequest(email.trim(), password, name.trim()))
+    suspend fun register(name: String, email: String, password: String, role: String): Result<User> = runCatching {
+        val res = api.register(RegisterRequest(email.trim(), password, name.trim(), role))
+        session.save(res.token, res.user)
+        _user.value = res.user
+        res.user
+    }
+
+    /** Exchanges a Google ID token for a Cabin session (server verifies it and links/creates the account). */
+    suspend fun googleSignIn(idToken: String): Result<User> = runCatching {
+        val res = api.googleSignIn(GoogleAuthRequest(idToken))
         session.save(res.token, res.user)
         _user.value = res.user
         res.user

@@ -4,13 +4,19 @@ struct User: Codable, Identifiable, Hashable {
     let id: String
     let email: String
     let name: String
+    var role: String = "user"
     var createdAt: String = ""
+
+    var isAgent: Bool { role == "agent" }
 }
 
 struct UserSummary: Codable, Hashable {
     let id: String
     let name: String
     var email: String = ""
+    var role: String = "user"
+
+    var isAgent: Bool { role == "agent" }
 }
 
 struct ListingImage: Codable, Identifiable, Hashable {
@@ -52,6 +58,7 @@ struct RegisterRequest: Encodable {
     let email: String
     let password: String
     let name: String
+    let role: String
 }
 
 struct LoginRequest: Encodable {

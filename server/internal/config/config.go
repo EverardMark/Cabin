@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 )
 
 // Config holds all runtime configuration, loaded from environment variables.
@@ -18,6 +19,11 @@ type Config struct {
 	DBDriver string // "sqlite" (default) or "mysql"
 	DBPath   string // SQLite file path (when DBDriver == "sqlite")
 	MySQLDSN string // MySQL DSN (when DBDriver == "mysql")
+
+	// GoogleClientIDs are the accepted OAuth client IDs (a token's "aud"):
+	// typically the Web, iOS, and Android client IDs, since each platform's
+	// SDK issues tokens for a different audience. Empty disables Google sign-in.
+	GoogleClientIDs []string
 }
 
 // Load reads configuration from the environment, applying development-friendly
@@ -30,6 +36,9 @@ func Load() *Config {
 		Env:       getEnv("ENV", "development"),
 		DBDriver:  getEnv("DB_DRIVER", "sqlite"),
 		DBPath:    getEnv("DB_PATH", "cabin.db"),
+
+		// Comma-separated list of accepted Google client IDs (Web, iOS, Android).
+		GoogleClientIDs: parseCSV(getEnv("GOOGLE_CLIENT_ID", "")),
 	}
 
 	isProd := cfg.Env == "production"
@@ -60,6 +69,17 @@ func Load() *Config {
 	cfg.Seed = getEnvBool("SEED", !isProd)
 
 	return cfg
+}
+
+// parseCSV splits a comma-separated value into trimmed, non-empty items.
+func parseCSV(s string) []string {
+	var out []string
+	for _, part := range strings.Split(s, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getEnv(key, fallback string) string {

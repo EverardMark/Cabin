@@ -7,15 +7,21 @@ data class User(
     val id: String,
     val email: String,
     val name: String,
+    val role: String = "user",
     val createdAt: String = "",
-)
+) {
+    val isAgent: Boolean get() = role == "agent"
+}
 
 @Serializable
 data class UserSummary(
     val id: String,
     val name: String,
     val email: String = "",
-)
+    val role: String = "user",
+) {
+    val isAgent: Boolean get() = role == "agent"
+}
 
 @Serializable
 data class ListingImage(
@@ -67,7 +73,10 @@ data class ListingsResponse(
 )
 
 @Serializable
-data class RegisterRequest(val email: String, val password: String, val name: String)
+data class RegisterRequest(val email: String, val password: String, val name: String, val role: String)
+
+@Serializable
+data class GoogleAuthRequest(val idToken: String)
 
 @Serializable
 data class LoginRequest(val email: String, val password: String)

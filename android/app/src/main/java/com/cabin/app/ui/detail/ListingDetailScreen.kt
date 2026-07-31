@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cabin.app.data.model.Listing
+import com.cabin.app.ui.common.AgentBadge
 import com.cabin.app.ui.common.FullScreenLoading
 import com.cabin.app.ui.common.FullScreenMessage
 import com.cabin.app.ui.common.NetworkImage
@@ -212,7 +213,13 @@ private fun ListingDetailContent(listing: Listing, onBack: () -> Unit) {
                         Spacer(Modifier.size(12.dp))
                         Column {
                             Text("Listed by", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                            Text(owner.name, style = MaterialTheme.typography.titleMedium)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(owner.name, style = MaterialTheme.typography.titleMedium)
+                                if (owner.isAgent) {
+                                    Spacer(Modifier.size(6.dp))
+                                    AgentBadge()
+                                }
+                            }
                         }
                     }
                 }

@@ -4,7 +4,9 @@ CREATE TABLE IF NOT EXISTS users (
     id            TEXT PRIMARY KEY,
     email         TEXT NOT NULL UNIQUE,
     name          TEXT NOT NULL,
+    role          TEXT NOT NULL DEFAULT 'user',
     password_hash TEXT NOT NULL,
+    google_id     TEXT NOT NULL DEFAULT '',
     created_at    TEXT NOT NULL
 );
 

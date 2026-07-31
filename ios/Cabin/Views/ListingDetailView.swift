@@ -130,7 +130,10 @@ struct ListingDetailView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text("Listed by").font(.caption).foregroundStyle(.secondary)
-                Text(owner.name).font(.headline)
+                HStack(spacing: 6) {
+                    Text(owner.name).font(.headline)
+                    if owner.isAgent { AgentBadge() }
+                }
             }
             Spacer()
         }

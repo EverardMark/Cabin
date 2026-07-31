@@ -1,4 +1,5 @@
 import SwiftUI
+import GoogleSignIn
 
 @main
 struct CabinApp: App {
@@ -9,6 +10,9 @@ struct CabinApp: App {
             RootView()
                 .environment(appState)
                 .tint(.cabinForest)
+                .onOpenURL { url in
+                    GIDSignIn.sharedInstance.handle(url)
+                }
         }
     }
 }

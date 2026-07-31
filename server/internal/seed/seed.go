@@ -53,6 +53,7 @@ func Run(users *store.UserStore, listings *store.ListingStore) error {
 		ID:           uuid.NewString(),
 		Email:        DemoEmail,
 		Name:         "Demo Agent",
+		Role:         models.RoleAgent,
 		PasswordHash: hash,
 		CreatedAt:    time.Now().UTC(),
 	}

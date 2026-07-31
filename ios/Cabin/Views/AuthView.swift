@@ -1,4 +1,6 @@
 import SwiftUI
+import UIKit
+import GoogleSignIn
 
 struct AuthView: View {
     @Environment(AppState.self) private var appState
@@ -7,6 +9,7 @@ struct AuthView: View {
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
+    @State private var isAgent = false
     @State private var errorMessage: String?
     @State private var loading = false
 
@@ -27,6 +30,18 @@ struct AuthView: View {
                     TextField("Full name", text: $name)
                         .textContentType(.name)
                         .textFieldStyle(.roundedBorder)
+
+                    Picker("Account type", selection: $isAgent) {
+                        Text("I'm looking for a home").tag(false)
+                        Text("I'm a real estate agent").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    if isAgent {
+                        Text("Agent accounts can post listings.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
                 TextField("Email", text: $email)
                     .textContentType(.emailAddress)
@@ -55,6 +70,17 @@ struct AuthView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .disabled(!canSubmit || loading)
+
+                Button(action: signInWithGoogle) {
+                    HStack {
+                        Image(systemName: "g.circle.fill")
+                        Text("Continue with Google")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.large)
+                .disabled(loading)
 
                 Button(isRegister ? "Already have an account? Log in" : "New here? Create an account") {
                     isRegister.toggle()
@@ -95,7 +121,7 @@ struct AuthView: View {
         Task {
             do {
                 if isRegister {
-                    try await appState.register(name: name, email: email, password: password)
+                    try await appState.register(name: name, email: email, password: password, role: isAgent ? "agent" : "user")
                 } else {
                     try await appState.login(email: email, password: password)
                 }
@@ -104,5 +130,55 @@ struct AuthView: View {
             }
             loading = false
         }
+    }
+
+    private func signInWithGoogle() {
+        guard let clientID = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String,
+              !clientID.isEmpty else {
+            errorMessage = "Google sign-in isn't configured yet."
+            return
+        }
+        guard let presenter = UIApplication.shared.topViewController else {
+            errorMessage = "Couldn't present Google sign-in."
+            return
+        }
+        GIDSignIn.sharedInstance.configuration = GIDConfiguration(clientID: clientID)
+        loading = true
+        errorMessage = nil
+        GIDSignIn.sharedInstance.signIn(withPresenting: presenter) { result, error in
+            Task { @MainActor in
+                if let error {
+                    errorMessage = error.localizedDescription
+                    loading = false
+                    return
+                }
+                guard let idToken = result?.user.idToken?.tokenString else {
+                    errorMessage = "No Google identity token returned."
+                    loading = false
+                    return
+                }
+                do {
+                    try await appState.loginWithGoogle(idToken: idToken)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
+                loading = false
+            }
+        }
+    }
+}
+
+private extension UIApplication {
+    /// The topmost presented view controller of the active window scene.
+    var topViewController: UIViewController? {
+        let keyWindow = connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }
+        var top = keyWindow?.rootViewController
+        while let presented = top?.presentedViewController {
+            top = presented
+        }
+        return top
     }
 }

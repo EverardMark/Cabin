@@ -25,6 +25,20 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.cabin.app.util.Format
 
+/** A small pill marking a user as a real estate agent. */
+@Composable
+fun AgentBadge(modifier: Modifier = Modifier) {
+    Text(
+        "AGENT",
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f), RoundedCornerShape(50))
+            .padding(horizontal = 8.dp, vertical = 2.dp),
+    )
+}
+
 /** Coil image that resolves relative (/uploads/...) or absolute URLs. */
 @Composable
 fun NetworkImage(

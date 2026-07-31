@@ -14,12 +14,20 @@ settings:
     CODE_SIGNING_REQUIRED: "NO"
     CODE_SIGNING_ALLOWED: "NO"
 
+packages:
+  GoogleSignIn:
+    url: https://github.com/google/GoogleSignIn-iOS
+    from: "7.1.0"
+
 targets:
   Cabin:
     type: application
     platform: iOS
     sources:
       - path: Cabin
+    dependencies:
+      - package: GoogleSignIn
+        product: GoogleSignIn
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.cabin.app
@@ -31,6 +39,14 @@ targets:
       path: Cabin/Info.plist
       properties:
         CFBundleDisplayName: Cabin
+        # Google Sign-In: paste your iOS OAuth client ID below to activate.
+        # Leaving it empty keeps Google sign-in dormant (the button shows
+        # "isn't configured yet"). The URL scheme must be the REVERSED client ID
+        # (e.g. com.googleusercontent.apps.1234567890-abcdef).
+        GIDClientID: ""
+        CFBundleURLTypes:
+          - CFBundleURLSchemes:
+              - "REPLACE_WITH_REVERSED_GOOGLE_IOS_CLIENT_ID"
         UILaunchScreen: {}
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: false

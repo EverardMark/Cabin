@@ -28,6 +28,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cabin.app.ui.common.AgentBadge
 import com.cabin.app.ui.listings.ListingCard
 
 @Composable
@@ -57,7 +58,13 @@ fun ProfileScreen(
                 }
                 Spacer(Modifier.size(14.dp))
                 Column {
-                    Text(user?.name ?: "—", style = MaterialTheme.typography.titleLarge)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(user?.name ?: "—", style = MaterialTheme.typography.titleLarge)
+                        if (user?.isAgent == true) {
+                            Spacer(Modifier.size(8.dp))
+                            AgentBadge()
+                        }
+                    }
                     Text(
                         user?.email ?: "",
                         style = MaterialTheme.typography.bodyMedium,
@@ -90,7 +97,8 @@ fun ProfileScreen(
             }
             state.listings.isEmpty() -> item {
                 Text(
-                    "You haven't posted any listings yet. Tap Post to add your first one.",
+                    if (user?.isAgent == true) "You haven't posted any listings yet. Tap Post to add your first one."
+                    else "Only agent accounts can post listings. Register as an agent to start posting.",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
             }

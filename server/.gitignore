@@ -1,7 +1,7 @@
-# Binaries
+# Binaries (anchored to the module root so they don't match the cmd/api/ source dir)
 /bin/
-cabin
-api
+/cabin
+/api
 
 # Database & uploads (local runtime data)
 *.db

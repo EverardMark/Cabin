@@ -37,7 +37,7 @@ type ListingFilter struct {
 const listingColumns = `l.id, l.user_id, l.title, l.description, l.price, l.currency,
 	l.property_type, l.listing_type, l.bedrooms, l.bathrooms, l.area_sqft,
 	l.address, l.city, l.state, l.zip_code, l.latitude, l.longitude, l.status,
-	l.created_at, l.updated_at, u.name, u.email`
+	l.created_at, l.updated_at, u.name, u.email, u.role`
 
 // Create inserts a new listing, stamping created/updated timestamps.
 func (s *ListingStore) Create(l *models.Listing) error {
@@ -282,13 +282,13 @@ func (s *ListingStore) imagesFor(ids []string) (map[string][]models.ListingImage
 func scanListing(sc rowScanner) (*models.Listing, error) {
 	var l models.Listing
 	var lat, lng sql.NullFloat64
-	var created, updated, ownerName, ownerEmail string
+	var created, updated, ownerName, ownerEmail, ownerRole string
 
 	err := sc.Scan(
 		&l.ID, &l.UserID, &l.Title, &l.Description, &l.Price, &l.Currency,
 		&l.PropertyType, &l.ListingType, &l.Bedrooms, &l.Bathrooms, &l.AreaSqft,
 		&l.Address, &l.City, &l.State, &l.ZipCode, &lat, &lng, &l.Status,
-		&created, &updated, &ownerName, &ownerEmail,
+		&created, &updated, &ownerName, &ownerEmail, &ownerRole,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -307,7 +307,7 @@ func scanListing(sc rowScanner) (*models.Listing, error) {
 	}
 	l.CreatedAt, _ = time.Parse(time.RFC3339, created)
 	l.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
-	l.Owner = &models.UserSummary{ID: l.UserID, Name: ownerName, Email: ownerEmail}
+	l.Owner = &models.UserSummary{ID: l.UserID, Name: ownerName, Email: ownerEmail, Role: ownerRole}
 	l.Images = []models.ListingImage{}
 	return &l, nil
 }

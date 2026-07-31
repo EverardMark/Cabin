@@ -7,22 +7,33 @@ var (
 	PropertyTypes = []string{"house", "apartment", "condo", "townhouse", "land"}
 	ListingTypes  = []string{"sale", "rent"}
 	Statuses      = []string{"active", "pending", "sold", "rented", "inactive"}
+	// Roles distinguishes agents (who may post listings) from regular users.
+	Roles = []string{"user", "agent"}
 )
+
+// RoleAgent is the role required to create listings.
+const RoleAgent = "agent"
 
 // User is a registered account. PasswordHash is never serialized to JSON.
 type User struct {
 	ID           string    `json:"id"`
 	Email        string    `json:"email"`
 	Name         string    `json:"name"`
+	Role         string    `json:"role"` // "user" (default) or "agent"
 	PasswordHash string    `json:"-"`
+	GoogleID     string    `json:"-"` // Google "sub" for social logins; empty for password accounts
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+// IsAgent reports whether the user may post listings.
+func (u *User) IsAgent() bool { return u.Role == RoleAgent }
 
 // UserSummary is the public subset of a user, embedded in listings.
 type UserSummary struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
+	Role  string `json:"role"`
 }
 
 // Listing is a real estate posting.
@@ -62,5 +73,5 @@ type ListingImage struct {
 
 // Summary returns the public view of the user.
 func (u *User) Summary() UserSummary {
-	return UserSummary{ID: u.ID, Name: u.Name, Email: u.Email}
+	return UserSummary{ID: u.ID, Name: u.Name, Email: u.Email, Role: u.Role}
 }

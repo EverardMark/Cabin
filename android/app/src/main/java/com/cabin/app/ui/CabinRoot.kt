@@ -54,20 +54,21 @@ fun CabinRoot() {
     when {
         !booted -> FullScreenLoading()
         user == null -> AuthScreen()
-        else -> MainScaffold()
+        else -> MainScaffold(isAgent = user?.isAgent == true)
     }
 }
 
 private data class Tab(val route: String, val label: String, val icon: androidx.compose.ui.graphics.vector.ImageVector)
 
 @Composable
-private fun MainScaffold() {
+private fun MainScaffold(isAgent: Boolean) {
     val navController = rememberNavController()
-    val tabs = listOf(
-        Tab(Routes.BROWSE, "Browse", Icons.Outlined.Search),
-        Tab(Routes.POST, "Post", Icons.Outlined.AddCircle),
-        Tab(Routes.PROFILE, "Profile", Icons.Outlined.Person),
-    )
+    // Only agents get the Post tab.
+    val tabs = buildList {
+        add(Tab(Routes.BROWSE, "Browse", Icons.Outlined.Search))
+        if (isAgent) add(Tab(Routes.POST, "Post", Icons.Outlined.AddCircle))
+        add(Tab(Routes.PROFILE, "Profile", Icons.Outlined.Person))
+    }
 
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
