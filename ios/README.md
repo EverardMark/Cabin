@@ -35,6 +35,7 @@ Native iOS client for Cabin, built with SwiftUI and the Observation framework.
 - **async/await** networking over `URLSession`
 - **Keychain** for the JWT, `UserDefaults` for the cached user
 - **PhotosPicker** for multi-image upload
+- **MapKit** for map search (no API key needed)
 
 ## Structure
 
@@ -44,11 +45,31 @@ Cabin/
   State/          AppState (@Observable) — auth + API access
   Models/         Codable models (snake_case ↔ camelCase)
   Networking/     APIClient (async), SessionStore + Keychain
-  Views/          Auth, Listings (+ card), Detail, Create, Profile, shared Components
-  Support/        Config (base URL), Theme (colors), Format (money/urls)
+  Views/          Auth, Listings, Detail, Map, Messages, Viewings, UserProfile,
+                  SavedSearches, Create, Profile, TrustBadges, shared Components
+  Support/        Config (base URL), Theme (colors), Format (money/dates/urls)
 ```
 
 ## Screens
 
-Auth (login/register) · Browse with search & filters · Listing detail with paged gallery ·
-Post a listing (PhotosPicker upload) · Profile with your listings and logout.
+Five tabs — **Browse**, **Messages**, **Post**, **Viewings**, **Profile** — plus pushed
+screens for listing detail, map search, chat, another user's profile, and saved searches.
+
+- **Browse** — search, buy/rent and property-type filters, sort, and a **"Verified listings
+  only"** switch that defaults to on (the survey's most requested feature, at 79%)
+- **Listing detail** — paged gallery, a trust panel showing the screening verdict and its
+  concerns, a stale-listing warning, a price check against similar listings, the poster's
+  verification and rating, and buttons to message, book a viewing, or report
+- **Map** — pan to search a viewport; verified listings get a distinct pin
+- **Messages / Chat** — per-listing threads with unread counts and a standing warning never
+  to pay before viewing
+- **Viewings** — request, accept, decline, cancel, complete
+- **Profile** — your verification status and a "Request verification" button, saved searches,
+  viewings, and your own listings annotated with why any were flagged or rejected
+
+## Trust UI
+
+`Views/TrustBadges.swift` holds the verification badge, trust panel, rating stars and stale
+warning. The badge deliberately claims a *screened listing*, not proof of ownership, and the
+detail screen says so. The "Agent" label is an occupation tag only — it is self-declared at
+signup, so it is never presented as a trust signal.

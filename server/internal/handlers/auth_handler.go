@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ type registerRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	Name     string `json:"name"`
+	Phone    string `json:"phone"`
 	Role     string `json:"role"` // "user" (default) or "agent"
 }
 
@@ -37,6 +39,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	req.Name = strings.TrimSpace(req.Name)
+	req.Phone = strings.TrimSpace(req.Phone)
 
 	if !strings.Contains(req.Email, "@") {
 		writeError(w, http.StatusBadRequest, "a valid email is required")
@@ -54,8 +57,13 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	if req.Role == "" {
 		req.Role = "user"
 	}
+	// Admin accounts are provisioned, never self-selected at signup.
+	if req.Role == models.RoleAdmin {
+		writeError(w, http.StatusForbidden, "admin accounts cannot be self-registered")
+		return
+	}
 	if !contains(models.Roles, req.Role) {
-		writeError(w, http.StatusBadRequest, "role must be one of: "+strings.Join(models.Roles, ", "))
+		writeError(w, http.StatusBadRequest, "role must be one of: user, agent")
 		return
 	}
 
@@ -66,15 +74,17 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := &models.User{
-		ID:           uuid.NewString(),
-		Email:        req.Email,
-		Name:         req.Name,
-		Role:         req.Role,
-		PasswordHash: hash,
-		CreatedAt:    time.Now().UTC(),
+		ID:                 uuid.NewString(),
+		Email:              req.Email,
+		Name:               req.Name,
+		Phone:              req.Phone,
+		Role:               req.Role,
+		PasswordHash:       hash,
+		VerificationStatus: models.VerificationUnverified,
+		CreatedAt:          time.Now().UTC(),
 	}
 	if err := s.users.Create(user); err != nil {
-		if err == store.ErrEmailTaken {
+		if errors.Is(err, store.ErrEmailTaken) {
 			writeError(w, http.StatusConflict, "email already registered")
 			return
 		}
@@ -167,7 +177,7 @@ func (s *Server) handleGoogleAuth(w http.ResponseWriter, r *http.Request) {
 func (s *Server) findOrCreateGoogleUser(claims *auth.GoogleClaims) (*models.User, error) {
 	if user, err := s.users.GetByGoogleID(claims.Sub); err == nil {
 		return user, nil
-	} else if err != store.ErrNotFound {
+	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, err
 	}
 
@@ -176,8 +186,9 @@ func (s *Server) findOrCreateGoogleUser(claims *auth.GoogleClaims) (*models.User
 			return nil, linkErr
 		}
 		user.GoogleID = claims.Sub
+		user.EmailVerified = true
 		return user, nil
-	} else if err != store.ErrNotFound {
+	} else if !errors.Is(err, store.ErrNotFound) {
 		return nil, err
 	}
 
@@ -186,12 +197,14 @@ func (s *Server) findOrCreateGoogleUser(claims *auth.GoogleClaims) (*models.User
 		name = claims.Email
 	}
 	user := &models.User{
-		ID:        uuid.NewString(),
-		Email:     claims.Email,
-		Name:      name,
-		Role:      "user", // social sign-ups start as regular users
-		GoogleID:  claims.Sub,
-		CreatedAt: time.Now().UTC(),
+		ID:                 uuid.NewString(),
+		Email:              claims.Email,
+		Name:               name,
+		Role:               "user",
+		GoogleID:           claims.Sub,
+		EmailVerified:      true, // Google asserted it
+		VerificationStatus: models.VerificationUnverified,
+		CreatedAt:          time.Now().UTC(),
 	}
 	if err := s.users.Create(user); err != nil {
 		return nil, err
@@ -200,10 +213,168 @@ func (s *Server) findOrCreateGoogleUser(claims *auth.GoogleClaims) (*models.User
 }
 
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
-	user, err := s.users.GetByID(userIDFrom(r.Context()))
+	user, err := s.currentUser(r)
 	if err != nil {
 		writeError(w, http.StatusNotFound, "user not found")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"user": user})
+}
+
+// handleGetUser returns another user's public profile.
+func (s *Server) handleGetUser(w http.ResponseWriter, r *http.Request) {
+	user, err := s.users.GetByID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "user not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"user": map[string]any{
+			"id":                  user.ID,
+			"name":                user.Name,
+			"role":                user.Role,
+			"bio":                 user.Bio,
+			"verification_status": user.VerificationStatus,
+			"rating_avg":          user.RatingAvg,
+			"rating_count":        user.RatingCount,
+			"created_at":          user.CreatedAt,
+		},
+	})
+}
+
+type profileInput struct {
+	Name      *string `json:"name"`
+	Phone     *string `json:"phone"`
+	Bio       *string `json:"bio"`
+	LicenseNo *string `json:"license_no"`
+	Role      *string `json:"role"`
+}
+
+// handleUpdateProfile edits the signed-in user's own profile.
+func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
+	user, err := s.currentUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "account not found")
+		return
+	}
+	var in profileInput
+	if err := decodeJSON(w, r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if in.Name != nil {
+		if name := strings.TrimSpace(*in.Name); name != "" {
+			user.Name = name
+		}
+	}
+	if in.Phone != nil {
+		phone := strings.TrimSpace(*in.Phone)
+		if phone != user.Phone {
+			// A changed number has to be proven again.
+			user.PhoneVerified = false
+		}
+		user.Phone = phone
+	}
+	if in.Bio != nil {
+		user.Bio = strings.TrimSpace(*in.Bio)
+	}
+	if in.LicenseNo != nil {
+		user.LicenseNo = strings.TrimSpace(*in.LicenseNo)
+	}
+	if in.Role != nil {
+		role := strings.ToLower(strings.TrimSpace(*in.Role))
+		// Switching between "user" and "agent" is allowed; admin is not.
+		if role == "user" || role == models.RoleAgent {
+			user.Role = role
+		}
+	}
+
+	if err := s.users.UpdateProfile(user); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not update profile")
+		return
+	}
+	updated, _ := s.users.GetByID(user.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"user": updated})
+}
+
+// handleRequestVerification submits the signed-in account for identity review.
+// The reviewer weighs profile completeness and plausibility; an agent claiming
+// a licence gets a stricter look than a private owner.
+func (s *Server) handleRequestVerification(w http.ResponseWriter, r *http.Request) {
+	user, err := s.currentUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "account not found")
+		return
+	}
+	if user.VerificationStatus == models.VerificationVerified {
+		writeJSON(w, http.StatusOK, map[string]any{"user": user})
+		return
+	}
+	if strings.TrimSpace(user.Phone) == "" {
+		writeError(w, http.StatusBadRequest, "add a contact number to your profile before requesting verification")
+		return
+	}
+
+	verdict, err := s.verifier.ReviewUser(r.Context(), user)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "verification is temporarily unavailable, please try again")
+		return
+	}
+	if err := s.users.SetVerification(user.ID, verdict.Status, verdict.Score, verdict.Summary); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not save verification result")
+		return
+	}
+	updated, _ := s.users.GetByID(user.ID)
+	writeJSON(w, http.StatusOK, map[string]any{"user": updated, "verification": verdict})
+}
+
+// handleMySummary powers the home badge counts: unread messages, upcoming
+// viewings, and listings that need the owner's attention.
+func (s *Server) handleMySummary(w http.ResponseWriter, r *http.Request) {
+	userID := userIDFrom(r.Context())
+
+	unread, err := s.chat.UnreadTotal(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not build summary")
+		return
+	}
+	viewings, err := s.viewings.ForUser(userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not build summary")
+		return
+	}
+	upcoming, pending := 0, 0
+	now := time.Now()
+	for _, v := range viewings {
+		if v.Status == "confirmed" && v.ScheduledFor.After(now) {
+			upcoming++
+		}
+		if v.Status == "requested" && v.OwnerID == userID {
+			pending++
+		}
+	}
+
+	mine, _, err := s.listings.List(store.ListingFilter{
+		UserID: userID, IncludeRejected: true, Page: 1, PageSize: 100,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not build summary")
+		return
+	}
+	needsAttention := 0
+	for i := range mine {
+		if mine[i].VerificationStatus == models.VerificationRejected ||
+			mine[i].VerificationStatus == models.VerificationFlagged ||
+			mine[i].IsStale() {
+			needsAttention++
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"unread_messages":            unread,
+		"upcoming_viewings":          upcoming,
+		"pending_viewing_requests":   pending,
+		"listings_needing_attention": needsAttention,
+	})
 }

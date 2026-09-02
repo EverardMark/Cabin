@@ -28,12 +28,27 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
+import com.cabin.app.data.model.Verification
 import com.cabin.app.ui.common.AgentBadge
+import com.cabin.app.ui.common.RatingStars
+import com.cabin.app.ui.common.VerificationBadge
+import com.cabin.app.ui.common.verificationColor
 import com.cabin.app.ui.listings.ListingCard
 
 @Composable
 fun ProfileScreen(
     onOpenListing: (String) -> Unit,
+    onOpenSavedSearches: () -> Unit,
+    onOpenViewings: () -> Unit,
     viewModel: ProfileViewModel = viewModel(),
 ) {
     val user by viewModel.user.collectAsStateWithLifecycle()
@@ -70,8 +85,26 @@ fun ProfileScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     )
+                    RatingStars(user?.ratingAvg ?: 0.0, user?.ratingCount ?: 0)
                 }
             }
+
+            VerificationCard(
+                status = user?.verificationStatus ?: Verification.UNVERIFIED,
+                notes = user?.verificationNotes.orEmpty(),
+                verifying = state.verifying,
+                onRequest = viewModel::requestVerification,
+            )
+            Spacer(Modifier.height(10.dp))
+
+            OutlinedButton(onClick = onOpenSavedSearches, modifier = Modifier.fillMaxWidth()) {
+                Text("Saved searches")
+            }
+            Spacer(Modifier.height(6.dp))
+            OutlinedButton(onClick = onOpenViewings, modifier = Modifier.fillMaxWidth()) {
+                Text("My viewings")
+            }
+            Spacer(Modifier.height(10.dp))
             OutlinedButton(
                 onClick = viewModel::logout,
                 modifier = Modifier.fillMaxWidth(),
@@ -97,13 +130,65 @@ fun ProfileScreen(
             }
             state.listings.isEmpty() -> item {
                 Text(
-                    if (user?.isAgent == true) "You haven't posted any listings yet. Tap Post to add your first one."
-                    else "Only agent accounts can post listings. Register as an agent to start posting.",
+                    "You haven't posted anything yet. Tap Post to add your first listing — owners, agents and renters can all post.",
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
             }
             else -> items(state.listings, key = { it.id }) { listing ->
-                ListingCard(listing = listing, onClick = { onOpenListing(listing.id) })
+                Column {
+                    ListingCard(listing = listing, onClick = { onOpenListing(listing.id) })
+                    if (listing.verificationStatus == Verification.REJECTED ||
+                        listing.verificationStatus == Verification.FLAGGED
+                    ) {
+                        Text(
+                            listing.verificationSummary.ifBlank { Verification.label(listing.verificationStatus) },
+                            style = MaterialTheme.typography.labelMedium,
+                            color = verificationColor(listing.verificationStatus),
+                            modifier = Modifier.padding(top = 4.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** The account's own verification state, and the way to earn the badge. */
+@Composable
+private fun VerificationCard(
+    status: String,
+    notes: String,
+    verifying: Boolean,
+    onRequest: () -> Unit,
+) {
+    val tint = verificationColor(status)
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(tint.copy(alpha = 0.08f))
+            .padding(14.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                if (status == Verification.VERIFIED) "Your account is verified" else "Get verified",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            VerificationBadge(status)
+        }
+        Text(
+            notes.ifBlank {
+                "Verified accounts get a badge on every listing they post. 86% of people we surveyed said verification is what decides whether they trust a listing."
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (status != Verification.VERIFIED) {
+            Button(onClick = onRequest, enabled = !verifying, modifier = Modifier.fillMaxWidth()) {
+                Text(if (verifying) "Checking…" else "Request verification")
             }
         }
     }

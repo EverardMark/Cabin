@@ -35,6 +35,7 @@ Or from the command line:
 - **MVVM** with `ViewModel` + `StateFlow`
 - **Retrofit** + OkHttp + kotlinx.serialization (snake_case ↔ camelCase)
 - **Coil** for image loading
+- **Maps Compose** for map search (needs a `MAPS_API_KEY`; dormant without one)
 - **DataStore** for the auth token / cached user
 - Manual DI via a small `ServiceLocator`
 
@@ -53,11 +54,40 @@ app/src/main/java/com/cabin/app/
   ui/
     theme/                 Material 3 theme
     CabinRoot.kt           auth gate + bottom-nav scaffold
+    common/                shared components + trust badges/panels
     auth/ listings/ detail/ create/ profile/
+    map/ messages/ viewings/ userprofile/ searches/
   util/                    formatting, error mapping, media
 ```
 
 ## Screens
 
-Auth (login/register) · Browse with search & filters · Listing detail with image pager ·
-Post a listing (with multi-photo picker) · Profile with your listings and logout.
+Five tabs — **Browse**, **Messages**, **Post**, **Viewings**, **Profile** — plus pushed
+screens for listing detail, map search, chat, another user's profile, and saved searches.
+
+- **Browse** — search, filters, sort, and a **"Verified listings only"** switch that defaults
+  to on (the survey's most requested feature, at 79%)
+- **Listing detail** — image pager, a trust panel showing the screening verdict and its
+  concerns, a stale-listing warning, a price check, the poster's verification and rating, and
+  actions to message, book a viewing, or report
+- **Map** — pan to search a viewport (needs `MAPS_API_KEY`; shows a clear "not configured"
+  message without one)
+- **Messages / Chat** — per-listing threads with unread badges
+- **Viewings** — request, accept, decline, cancel, complete
+- **Profile** — verification status and request button, saved searches, viewings, and your own
+  listings annotated with why any were flagged or rejected
+
+## Trust UI
+
+`ui/common/TrustViews.kt` holds the verification badge, trust panel, rating stars and stale
+warning. The badge claims a *screened listing*, not proof of ownership, and the detail screen
+says so. The "AGENT" label is an occupation tag only — self-declared at signup, so it is never
+presented as a trust signal.
+
+## Optional keys
+
+Both are blank by default and each feature stays dormant until filled in, in
+[`app/build.gradle.kts`](app/build.gradle.kts):
+
+- `GOOGLE_WEB_CLIENT_ID` — Sign in with Google
+- `MAPS_API_KEY` — the map search screen (also wired into the manifest as a placeholder)

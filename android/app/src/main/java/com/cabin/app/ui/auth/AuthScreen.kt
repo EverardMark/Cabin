@@ -50,6 +50,7 @@ fun AuthScreen(viewModel: AuthViewModel = viewModel()) {
     var email by rememberSaveable { mutableStateOf("") }
     var password by rememberSaveable { mutableStateOf("") }
     var isAgent by rememberSaveable { mutableStateOf(false) }
+    var phone by rememberSaveable { mutableStateOf("") }
 
     val canSubmit = email.isNotBlank() && password.length >= 6 && (!isRegister || name.isNotBlank())
 
@@ -102,6 +103,17 @@ fun AuthScreen(viewModel: AuthViewModel = viewModel()) {
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
                 )
 
+                // A contact number is part of what earns the verified badge.
+                OutlinedTextField(
+                    value = phone,
+                    onValueChange = { phone = it; viewModel.clearError() },
+                    label = { Text("Mobile number") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(14.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
+                )
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
@@ -109,7 +121,7 @@ fun AuthScreen(viewModel: AuthViewModel = viewModel()) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("I'm a real estate agent", style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            "Agent accounts can post listings",
+                            "Owners, buyers and renters can all post listings too",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         )
@@ -154,7 +166,7 @@ fun AuthScreen(viewModel: AuthViewModel = viewModel()) {
             PrimaryButton(
                 text = if (isRegister) "Create account" else "Log in",
                 onClick = {
-                    if (isRegister) viewModel.register(name, email, password, if (isAgent) "agent" else "user")
+                    if (isRegister) viewModel.register(name, email, password, phone, if (isAgent) "agent" else "user")
                     else viewModel.login(email, password)
                 },
                 enabled = canSubmit,

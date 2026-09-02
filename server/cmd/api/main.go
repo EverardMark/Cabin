@@ -1,6 +1,7 @@
 // Command api is the Cabin REST API server entrypoint. It loads configuration,
-// opens and migrates the database, wires the stores/handlers together, optionally
-// seeds demo data, and serves HTTP with graceful shutdown.
+// opens and migrates the database, wires the stores/handlers together, starts
+// the listing verification worker, optionally seeds demo data, and serves HTTP
+// with graceful shutdown.
 package main
 
 import (
@@ -20,6 +21,7 @@ import (
 	"cabin/internal/seed"
 	"cabin/internal/storage"
 	"cabin/internal/store"
+	"cabin/internal/verify"
 )
 
 func main() {
@@ -43,6 +45,10 @@ func main() {
 
 	users := store.NewUserStore(db)
 	listings := store.NewListingStore(db)
+	chat := store.NewChatStore(db)
+	viewings := store.NewViewingStore(db)
+	reviews := store.NewReviewStore(db)
+	searches := store.NewSearchStore(db)
 	tokens := auth.NewTokenService(cfg.JWTSecret)
 
 	uploads, err := storage.NewLocal(cfg.UploadDir)
@@ -50,13 +56,37 @@ func main() {
 		log.Fatalf("init upload storage: %v", err)
 	}
 
+	verifier := verify.New(cfg.AnthropicAPIKey, cfg.VerifyModel)
+	if !verifier.Enabled() {
+		log.Println("ANTHROPIC_API_KEY not set; listing review falls back to the built-in rule-based check")
+	}
+	worker := verify.NewWorker(verifier, listings, users)
+
 	if cfg.Seed {
 		if err := seed.Run(users, listings); err != nil {
 			log.Fatalf("seed data: %v", err)
 		}
 	}
 
-	srv := handlers.NewServer(cfg, users, listings, tokens, uploads)
+	srv := handlers.NewServer(handlers.Deps{
+		Config:   cfg,
+		Users:    users,
+		Listings: listings,
+		Chat:     chat,
+		Viewings: viewings,
+		Reviews:  reviews,
+		Searches: searches,
+		Tokens:   tokens,
+		Uploads:  uploads,
+		Verifier: verifier,
+		Worker:   worker,
+	})
+
+	// The worker runs for the life of the process and stops with the server.
+	workerCtx, stopWorker := context.WithCancel(context.Background())
+	defer stopWorker()
+	go worker.Run(workerCtx)
+
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           srv.Handler(),
@@ -67,7 +97,8 @@ func main() {
 	// an OS shutdown signal.
 	serverErr := make(chan error, 1)
 	go func() {
-		log.Printf("cabin-api listening on http://localhost:%s (env=%s, db=%s)", cfg.Port, cfg.Env, cfg.DBDriver)
+		log.Printf("cabin-api listening on http://localhost:%s (env=%s, db=%s, review=%s)",
+			cfg.Port, cfg.Env, cfg.DBDriver, verifier.ModelName())
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			serverErr <- err
 		}
@@ -82,6 +113,8 @@ func main() {
 	case sig := <-stop:
 		log.Printf("received %s, shutting down...", sig)
 	}
+
+	stopWorker()
 
 	// Give in-flight requests up to 10s to finish before forcing the connection closed.
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

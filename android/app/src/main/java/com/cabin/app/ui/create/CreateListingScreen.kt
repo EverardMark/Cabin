@@ -20,6 +20,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.AddAPhoto
 import androidx.compose.material3.FilterChip
@@ -167,7 +169,7 @@ fun CreateListingScreen(
 
         Spacer(Modifier.height(20.dp))
         Field(value = title, onChange = { title = it }, label = "Title *")
-        Field(value = price, onChange = { price = it }, label = "Price *", keyboardType = KeyboardType.Number)
+        Field(value = price, onChange = { price = it }, label = "Price (₱) *", keyboardType = KeyboardType.Number)
         Field(
             value = description,
             onChange = { description = it },
@@ -196,6 +198,20 @@ fun CreateListingScreen(
         }
 
         Spacer(Modifier.height(20.dp))
+        // Live feedback on the things the reviewer actually weighs. Poor photos
+        // and thin information were the survey's third-biggest complaint.
+        SectionLabel("Before you publish")
+        QualityCheck("At least 3 photos", images.size >= 3)
+        QualityCheck("Description of 20+ words", description.trim().split(Regex("\\s+")).count { it.isNotBlank() } >= 20)
+        QualityCheck("City or address filled in", city.isNotBlank() || address.isNotBlank())
+        QualityCheck("Price set", (price.toLongOrNull() ?: 0) > 0)
+        Text(
+            "Every listing is screened before it gets a verified badge. Complete listings with real photos pass; thin ones get flagged for buyers to see.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 8.dp),
+        )
+
         PrimaryButton(
             text = "Publish listing",
             onClick = {
@@ -221,6 +237,23 @@ fun CreateListingScreen(
             modifier = Modifier.fillMaxWidth().height(52.dp),
         )
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun QualityCheck(label: String, done: Boolean) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 2.dp)) {
+        Icon(
+            if (done) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+            contentDescription = null,
+            tint = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            "  $label",
+            style = MaterialTheme.typography.labelMedium,
+            color = if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 

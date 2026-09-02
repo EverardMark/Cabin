@@ -63,19 +63,44 @@ final class APIClient {
         try await send("api/v1/auth/me", authorized: true)
     }
 
+    func summary() async throws -> HomeSummary {
+        try await send("api/v1/me/summary", authorized: true)
+    }
+
+    // MARK: Profile & verification
+
+    func updateProfile(_ body: ProfileRequest) async throws -> MeResponse {
+        try await send("api/v1/me", method: "PATCH", body: body, authorized: true)
+    }
+
+    /// Submits the signed-in account for the automated identity review.
+    func requestVerification() async throws -> VerificationResponse {
+        try await send("api/v1/me/verification", method: "POST", authorized: true)
+    }
+
+    func profile(userId: String) async throws -> ProfileResponse {
+        try await send("api/v1/users/\(userId)")
+    }
+
     // MARK: Listings
 
-    func listings(
-        query: String? = nil,
-        propertyType: String? = nil,
-        listingType: String? = nil,
-        sort: String? = "recent"
-    ) async throws -> ListingsResponse {
-        var items = [URLQueryItem(name: "page_size", value: "50")]
-        if let query, !query.isEmpty { items.append(URLQueryItem(name: "q", value: query)) }
-        if let propertyType { items.append(URLQueryItem(name: "property_type", value: propertyType)) }
-        if let listingType { items.append(URLQueryItem(name: "listing_type", value: listingType)) }
-        if let sort { items.append(URLQueryItem(name: "sort", value: sort)) }
+    func listings(filters: ListingFilters, pageSize: Int = 50) async throws -> ListingsResponse {
+        var items = filters.queryItems
+        items.append(URLQueryItem(name: "page_size", value: String(pageSize)))
+        return try await send("api/v1/listings", query: items)
+    }
+
+    /// Listings inside a map viewport.
+    func listings(inBoundingBox box: (minLat: Double, maxLat: Double, minLng: Double, maxLng: Double),
+                  filters: ListingFilters) async throws -> ListingsResponse {
+        var items = filters.queryItems
+        items.append(contentsOf: [
+            URLQueryItem(name: "min_lat", value: String(box.minLat)),
+            URLQueryItem(name: "max_lat", value: String(box.maxLat)),
+            URLQueryItem(name: "min_lng", value: String(box.minLng)),
+            URLQueryItem(name: "max_lng", value: String(box.maxLng)),
+            URLQueryItem(name: "page_size", value: "100"),
+        ])
         return try await send("api/v1/listings", query: items)
     }
 
@@ -89,6 +114,21 @@ final class APIClient {
 
     func myListings() async throws -> ListingsResponse {
         try await send("api/v1/me/listings", authorized: true)
+    }
+
+    /// Confirms a listing is still available, clearing the stale warning.
+    func confirmListing(id: String) async throws -> Listing {
+        try await send("api/v1/listings/\(id)/confirm", method: "POST", authorized: true)
+    }
+
+    func reportListing(id: String, reason: String, details: String) async throws {
+        let _: EmptyResponse = try await send(
+            "api/v1/listings/\(id)/report", method: "POST",
+            body: ReportRequest(reason: reason, details: details), authorized: true)
+    }
+
+    func priceComparison(listingId: String) async throws -> PriceComparison {
+        try await send("api/v1/listings/\(listingId)/price-comparison")
     }
 
     @discardableResult
@@ -106,6 +146,78 @@ final class APIClient {
         request.httpBody = body
 
         return try await perform(request)
+    }
+
+    // MARK: Messaging
+
+    func startConversation(listingId: String) async throws -> Conversation {
+        try await send("api/v1/listings/\(listingId)/conversations", method: "POST", authorized: true)
+    }
+
+    func conversations() async throws -> ConversationsResponse {
+        try await send("api/v1/conversations", authorized: true)
+    }
+
+    func messages(conversationId: String) async throws -> MessagesResponse {
+        try await send("api/v1/conversations/\(conversationId)/messages", authorized: true)
+    }
+
+    @discardableResult
+    func sendMessage(conversationId: String, body: String) async throws -> Message {
+        struct Body: Encodable { let body: String }
+        return try await send("api/v1/conversations/\(conversationId)/messages",
+                              method: "POST", body: Body(body: body), authorized: true)
+    }
+
+    // MARK: Viewings
+
+    func requestViewing(listingId: String, at date: Date, note: String) async throws -> ViewingRequest {
+        try await send("api/v1/listings/\(listingId)/viewings", method: "POST",
+                       body: ViewingRequestBody(scheduledFor: Format.timestamp(date), note: note),
+                       authorized: true)
+    }
+
+    func viewings() async throws -> ViewingsResponse {
+        try await send("api/v1/viewings", authorized: true)
+    }
+
+    @discardableResult
+    func updateViewing(id: String, body: ViewingUpdateBody) async throws -> ViewingRequest {
+        try await send("api/v1/viewings/\(id)", method: "PATCH", body: body, authorized: true)
+    }
+
+    // MARK: Reviews
+
+    func reviews(userId: String) async throws -> ReviewsResponse {
+        try await send("api/v1/users/\(userId)/reviews")
+    }
+
+    @discardableResult
+    func createReview(userId: String, rating: Int, comment: String, listingId: String) async throws -> Review {
+        try await send("api/v1/users/\(userId)/reviews", method: "POST",
+                       body: ReviewRequest(rating: rating, comment: comment, listingId: listingId),
+                       authorized: true)
+    }
+
+    // MARK: Saved searches
+
+    func savedSearches() async throws -> SavedSearchesResponse {
+        try await send("api/v1/me/searches", authorized: true)
+    }
+
+    @discardableResult
+    func saveSearch(name: String, query: String) async throws -> SavedSearch {
+        try await send("api/v1/me/searches", method: "POST",
+                       body: SavedSearchRequest(name: name, query: query), authorized: true)
+    }
+
+    func deleteSavedSearch(id: String) async throws {
+        let request = try makeRequest("api/v1/me/searches/\(id)", method: "DELETE", authorized: true)
+        try await performVoid(request)
+    }
+
+    func runSavedSearch(id: String) async throws -> ListingsResponse {
+        try await send("api/v1/me/searches/\(id)/results", authorized: true)
     }
 
     // MARK: Core
@@ -137,7 +249,7 @@ final class APIClient {
         ) else {
             throw APIError.network
         }
-        if let query { components.queryItems = query }
+        if let query, !query.isEmpty { components.queryItems = query }
         guard let url = components.url else { throw APIError.network }
 
         var request = URLRequest(url: url)
@@ -149,27 +261,44 @@ final class APIClient {
     }
 
     private func perform<T: Decodable>(_ request: URLRequest) async throws -> T {
-        let data: Data
-        let response: URLResponse
-        do {
-            (data, response) = try await URLSession.shared.data(for: request)
-        } catch {
-            throw APIError.network
-        }
+        let (data, http) = try await run(request)
+        try check(http, data)
 
-        guard let http = response as? HTTPURLResponse else { throw APIError.network }
-
-        guard (200..<300).contains(http.statusCode) else {
-            if let serverError = try? decoder.decode(ServerError.self, from: data) {
-                throw APIError.server(serverError.error)
-            }
-            throw APIError.server("Request failed (\(http.statusCode))")
-        }
-
+        // 204 and other empty bodies decode as EmptyResponse.
+        if data.isEmpty, let empty = EmptyResponse() as? T { return empty }
         do {
             return try decoder.decode(T.self, from: data)
         } catch {
             throw APIError.decoding
         }
     }
+
+    private func performVoid(_ request: URLRequest) async throws {
+        let (data, http) = try await run(request)
+        try check(http, data)
+    }
+
+    private func run(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {
+        do {
+            let (data, response) = try await URLSession.shared.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIError.network }
+            return (data, http)
+        } catch let error as APIError {
+            throw error
+        } catch {
+            throw APIError.network
+        }
+    }
+
+    private func check(_ http: HTTPURLResponse, _ data: Data) throws {
+        guard (200..<300).contains(http.statusCode) else {
+            if let serverError = try? decoder.decode(ServerError.self, from: data) {
+                throw APIError.server(serverError.error)
+            }
+            throw APIError.server("Request failed (\(http.statusCode))")
+        }
+    }
 }
+
+/// Placeholder for endpoints that return no useful body.
+struct EmptyResponse: Decodable {}

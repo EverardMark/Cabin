@@ -22,18 +22,31 @@ struct MainTabView: View {
             }
             .tabItem { Label("Browse", systemImage: "magnifyingglass") }
 
-            // Only agents can post listings.
-            if appState.currentUser?.isAgent == true {
-                NavigationStack {
-                    CreateListingView()
-                }
-                .tabItem { Label("Post", systemImage: "plus.circle.fill") }
+            NavigationStack {
+                MessagesView()
             }
+            .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right") }
+            .badge(appState.summary.unreadMessages)
+
+            // Posting is open to everyone: owners are the largest group of
+            // posters in the survey, and no respondent wanted an agents-only
+            // marketplace.
+            NavigationStack {
+                CreateListingView()
+            }
+            .tabItem { Label("Post", systemImage: "plus.circle.fill") }
+
+            NavigationStack {
+                ViewingsView()
+            }
+            .tabItem { Label("Viewings", systemImage: "calendar") }
+            .badge(appState.summary.pendingViewingRequests)
 
             NavigationStack {
                 ProfileView()
             }
             .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
+        .task { await appState.refreshSummary() }
     }
 }

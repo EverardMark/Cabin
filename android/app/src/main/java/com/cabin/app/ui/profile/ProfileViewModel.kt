@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cabin.app.data.ServiceLocator
 import com.cabin.app.data.model.Listing
+import com.cabin.app.data.model.ProfileRequest
 import com.cabin.app.data.model.User
 import com.cabin.app.util.userMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,12 +17,16 @@ data class ProfileUiState(
     val loading: Boolean = true,
     val listings: List<Listing> = emptyList(),
     val error: String? = null,
+    val verifying: Boolean = false,
+    val verificationMessage: String? = null,
+    val savingProfile: Boolean = false,
 )
 
 class ProfileViewModel : ViewModel() {
     private val repo = ServiceLocator.repository
 
     val user: StateFlow<User?> = repo.user
+    val summary = repo.summary
 
     private val _state = MutableStateFlow(ProfileUiState())
     val state: StateFlow<ProfileUiState> = _state.asStateFlow()
@@ -36,6 +41,54 @@ class ProfileViewModel : ViewModel() {
             repo.myListings().fold(
                 onSuccess = { list -> _state.update { it.copy(loading = false, listings = list) } },
                 onFailure = { e -> _state.update { it.copy(loading = false, error = e.userMessage()) } },
+            )
+            repo.refreshSummary()
+        }
+    }
+
+    /**
+     * Submits the account for automated identity review. Verified accounts get a
+     * badge on every listing they post — 86% of surveyed users said verification
+     * is what decides whether they trust a listing.
+     */
+    fun requestVerification() {
+        if (_state.value.verifying) return
+        _state.update { it.copy(verifying = true, verificationMessage = null) }
+        viewModelScope.launch {
+            repo.requestVerification().fold(
+                onSuccess = { res ->
+                    _state.update {
+                        it.copy(
+                            verifying = false,
+                            verificationMessage = res.verification?.summary ?: "We've reviewed your account.",
+                        )
+                    }
+                },
+                onFailure = { e ->
+                    _state.update { it.copy(verifying = false, verificationMessage = e.userMessage()) }
+                },
+            )
+        }
+    }
+
+    fun clearVerificationMessage() = _state.update { it.copy(verificationMessage = null) }
+
+    fun saveProfile(name: String, phone: String, bio: String, licenseNo: String, isAgent: Boolean) {
+        _state.update { it.copy(savingProfile = true) }
+        viewModelScope.launch {
+            repo.updateProfile(
+                ProfileRequest(
+                    name = name,
+                    phone = phone,
+                    bio = bio,
+                    licenseNo = licenseNo,
+                    role = if (isAgent) "agent" else "user",
+                )
+            ).fold(
+                onSuccess = { _state.update { it.copy(savingProfile = false) } },
+                onFailure = { e ->
+                    _state.update { it.copy(savingProfile = false, verificationMessage = e.userMessage()) }
+                },
             )
         }
     }

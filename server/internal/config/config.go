@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -24,6 +25,15 @@ type Config struct {
 	// typically the Web, iOS, and Android client IDs, since each platform's
 	// SDK issues tokens for a different audience. Empty disables Google sign-in.
 	GoogleClientIDs []string
+
+	// AnthropicAPIKey enables Claude-backed listing verification. When empty the
+	// verifier falls back to a deterministic rule-based check, so the app still
+	// runs with zero setup.
+	AnthropicAPIKey string
+	// VerifyModel is the Claude model used to review listings.
+	VerifyModel string
+	// MaxUploadBytes caps a single image upload.
+	MaxUploadBytes int64
 }
 
 // Load reads configuration from the environment, applying development-friendly
@@ -39,6 +49,10 @@ func Load() *Config {
 
 		// Comma-separated list of accepted Google client IDs (Web, iOS, Android).
 		GoogleClientIDs: parseCSV(getEnv("GOOGLE_CLIENT_ID", "")),
+
+		AnthropicAPIKey: getEnv("ANTHROPIC_API_KEY", ""),
+		VerifyModel:     getEnv("VERIFY_MODEL", "claude-opus-5"),
+		MaxUploadBytes:  int64(getEnvInt("MAX_UPLOAD_MB", 10)) << 20,
 	}
 
 	isProd := cfg.Env == "production"
@@ -85,6 +99,15 @@ func parseCSV(s string) []string {
 func getEnv(key, fallback string) string {
 	if v, ok := os.LookupEnv(key); ok && v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getEnvInt(key string, fallback int) int {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			return n
+		}
 	}
 	return fallback
 }

@@ -8,6 +8,8 @@ plugins {
 android {
     namespace = "com.cabin.app"
     compileSdk = 35
+    // Pinned for reproducible builds across machines.
+    buildToolsVersion = "35.0.0"
 
     defaultConfig {
         applicationId = "com.cabin.app"
@@ -26,6 +28,12 @@ android {
         // Google "Web" OAuth client ID, used as the serverClientId for Sign in with Google.
         // Leave empty to keep Google sign-in disabled; paste your Web client ID to enable it.
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"\"")
+
+        // Google Maps API key for the map search screen. Leave empty to keep the
+        // map dormant; paste your Android Maps SDK key to enable it.
+        val mapsKey = ""
+        buildConfigField("String", "MAPS_API_KEY", "\"$mapsKey\"")
+        manifestPlaceholders["MAPS_API_KEY"] = mapsKey
     }
 
     buildTypes {
@@ -79,4 +87,9 @@ dependencies {
     implementation(libs.androidx.credentials)
     implementation(libs.androidx.credentials.play.services.auth)
     implementation(libs.google.identity.googleid)
+
+    // Map-based property search (48% of surveyed users asked for it). Rendering
+    // needs a Maps API key in the manifest; without one the map screen shows a
+    // "not configured" message, the same pattern as Google sign-in above.
+    implementation(libs.maps.compose)
 }

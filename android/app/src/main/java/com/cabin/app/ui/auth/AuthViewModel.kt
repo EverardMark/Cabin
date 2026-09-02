@@ -32,8 +32,8 @@ class AuthViewModel : ViewModel() {
 
     fun login(email: String, password: String) = submit { repo.login(email, password) }
 
-    fun register(name: String, email: String, password: String, role: String) =
-        submit { repo.register(name, email, password, role) }
+    fun register(name: String, email: String, password: String, phone: String, role: String) =
+        submit { repo.register(name, email, password, phone, role) }
 
     /**
      * Runs the Credential Manager "Sign in with Google" flow, then exchanges the

@@ -9,6 +9,7 @@ struct AuthView: View {
     @State private var name = ""
     @State private var email = ""
     @State private var password = ""
+    @State private var phone = ""
     @State private var isAgent = false
     @State private var errorMessage: String?
     @State private var loading = false
@@ -31,17 +32,24 @@ struct AuthView: View {
                         .textContentType(.name)
                         .textFieldStyle(.roundedBorder)
 
+                    TextField("Mobile number", text: $phone)
+                        .textContentType(.telephoneNumber)
+                        .keyboardType(.phonePad)
+                        .textFieldStyle(.roundedBorder)
+
                     Picker("Account type", selection: $isAgent) {
-                        Text("I'm looking for a home").tag(false)
-                        Text("I'm a real estate agent").tag(true)
+                        Text("Private individual").tag(false)
+                        Text("Real estate agent").tag(true)
                     }
                     .pickerStyle(.segmented)
-                    if isAgent {
-                        Text("Agent accounts can post listings.")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
+                    // Anyone can post — 36% of surveyed users are owners/sellers,
+                    // and nobody wanted an agents-only marketplace.
+                    Text(isAgent
+                         ? "You'll be asked for your PRC licence number when you verify."
+                         : "Owners, buyers and renters can all post and browse listings.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 TextField("Email", text: $email)
                     .textContentType(.emailAddress)
@@ -121,7 +129,7 @@ struct AuthView: View {
         Task {
             do {
                 if isRegister {
-                    try await appState.register(name: name, email: email, password: password, role: isAgent ? "agent" : "user")
+                    try await appState.register(name: name, email: email, password: password, phone: phone, role: isAgent ? "agent" : "user")
                 } else {
                     try await appState.login(email: email, password: password)
                 }

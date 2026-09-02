@@ -47,7 +47,7 @@ struct CreateListingView: View {
                 }
 
                 TextField("Title", text: $title)
-                TextField("Price", text: $price).keyboardType(.numberPad)
+                TextField("Price (₱)", text: $price).keyboardType(.numberPad)
                 TextField("Description", text: $description, axis: .vertical).lineLimit(3...6)
             }
 
@@ -59,9 +59,16 @@ struct CreateListingView: View {
 
             Section("Location") {
                 TextField("Address", text: $address)
-                TextField("City", text: $city)
-                TextField("State", text: $state)
-                TextField("ZIP", text: $zip).keyboardType(.numberPad)
+                TextField("City / Municipality", text: $city)
+                TextField("Province", text: $state)
+                TextField("Postal code", text: $zip).keyboardType(.numberPad)
+            }
+
+            Section("Before you publish") {
+                qualityChecklist
+                Text("Every listing is screened before it gets a verified badge. Complete listings with real photos pass; thin ones get flagged for buyers to see.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if let errorMessage {
@@ -86,6 +93,26 @@ struct CreateListingView: View {
         .onChange(of: pickerItems) { _, items in
             Task { await loadImages(items) }
         }
+    }
+
+    /// Live feedback on the things the reviewer actually weighs.
+    private var qualityChecklist: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            check("At least 3 photos", done: images.count >= 3)
+            check("Description of 20+ words", done: description.split(separator: " ").count >= 20)
+            check("City or address filled in", done: !city.trimmingCharacters(in: .whitespaces).isEmpty
+                                                  || !address.trimmingCharacters(in: .whitespaces).isEmpty)
+            check("Price set", done: (Int(price) ?? 0) > 0)
+            if propertyType != "land" {
+                check("Bedrooms or area given", done: (Int(bedrooms) ?? 0) > 0 || (Int(area) ?? 0) > 0)
+            }
+        }
+    }
+
+    private func check(_ label: String, done: Bool) -> some View {
+        Label(label, systemImage: done ? "checkmark.circle.fill" : "circle")
+            .font(.caption)
+            .foregroundStyle(done ? Color.cabinForest : .secondary)
     }
 
     private var photoRow: some View {
