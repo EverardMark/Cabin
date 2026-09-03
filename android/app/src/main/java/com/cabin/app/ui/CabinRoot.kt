@@ -34,7 +34,9 @@ import com.cabin.app.data.ServiceLocator
 import com.cabin.app.ui.auth.AuthScreen
 import com.cabin.app.ui.common.FullScreenLoading
 import com.cabin.app.ui.create.CreateListingScreen
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cabin.app.ui.detail.ListingDetailScreen
+import com.cabin.app.ui.detail.ListingDetailViewModel
 import com.cabin.app.ui.listings.ListingsScreen
 import com.cabin.app.ui.map.MapSearchScreen
 import com.cabin.app.ui.messages.ChatScreen
@@ -57,10 +59,12 @@ object Routes {
     const val DETAIL = "detail/{id}"
     const val CHAT = "chat/{id}"
     const val USER = "user/{id}"
+    const val EDIT = "edit/{id}"
 
     fun detail(id: String) = "detail/$id"
     fun chat(id: String) = "chat/$id"
     fun user(id: String) = "user/$id"
+    fun edit(id: String) = "edit/$id"
 }
 
 @Composable
@@ -187,6 +191,7 @@ private fun MainScaffold() {
                     onBack = { navController.popBackStack() },
                     onOpenConversation = { id -> navController.navigate(Routes.chat(id)) },
                     onOpenProfile = { id -> navController.navigate(Routes.user(id)) },
+                    onEdit = { id -> navController.navigate(Routes.edit(id)) },
                 )
             }
             composable(Routes.CHAT) { entry ->
@@ -197,6 +202,16 @@ private fun MainScaffold() {
                     viewModel = viewModel(factory = factoryFor { ChatViewModel(id) }),
                 )
             }
+            composable(Routes.EDIT) { entry ->
+                EditListingRoute(
+                    listingId = entry.arguments?.getString("id").orEmpty(),
+                    onSaved = { navController.popBackStack() },
+                    onDeleted = {
+                        // The listing is gone, so don't return to its detail screen.
+                        navController.popBackStack(Routes.BROWSE, inclusive = false)
+                    },
+                )
+            }
             composable(Routes.USER) { entry ->
                 val id = entry.arguments?.getString("id").orEmpty()
                 UserProfileScreen(
@@ -204,6 +219,28 @@ private fun MainScaffold() {
                 )
             }
         }
+    }
+}
+
+/**
+ * Loads a listing, then hands it to the shared form in edit mode. Editing is the
+ * repair path for a flagged listing, so it has to work from a bare id.
+ */
+@Composable
+private fun EditListingRoute(listingId: String, onSaved: () -> Unit, onDeleted: () -> Unit) {
+    val loader: ListingDetailViewModel = viewModel(key = "edit-$listingId")
+    LaunchedEffect(listingId) { loader.load(listingId) }
+    val state by loader.state.collectAsStateWithLifecycle()
+
+    val listing = state.listing
+    if (listing == null) {
+        FullScreenLoading()
+    } else {
+        CreateListingScreen(
+            onCreated = { onSaved() },
+            editing = listing,
+            onDeleted = onDeleted,
+        )
     }
 }
 

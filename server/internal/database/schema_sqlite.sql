@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS listings (
     verification_model   TEXT    NOT NULL DEFAULT '',
     verified_at          TEXT    NOT NULL DEFAULT '',
     last_confirmed_at    TEXT    NOT NULL DEFAULT '',
+    featured_until       TEXT    NOT NULL DEFAULT '',
     report_count         INTEGER NOT NULL DEFAULT 0,
     view_count           INTEGER NOT NULL DEFAULT 0,
     created_at           TEXT    NOT NULL,
@@ -60,6 +61,7 @@ CREATE INDEX IF NOT EXISTS idx_listings_created_at   ON listings(created_at);
 CREATE INDEX IF NOT EXISTS idx_listings_verification ON listings(verification_status);
 CREATE INDEX IF NOT EXISTS idx_listings_geo          ON listings(latitude, longitude);
 CREATE INDEX IF NOT EXISTS idx_listings_price        ON listings(price);
+CREATE INDEX IF NOT EXISTS idx_listings_featured     ON listings(featured_until);
 
 CREATE TABLE IF NOT EXISTS listing_images (
     id         TEXT PRIMARY KEY,

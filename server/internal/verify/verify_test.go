@@ -176,3 +176,34 @@ func contains(haystack, needle string) bool {
 		return false
 	})()
 }
+
+// The listing prompt must not carry the poster's account age. On a young
+// marketplace nearly every account is new, and including it made the reviewer
+// flag legitimate listings for "new_account" — which emptied the verified-only
+// filter that most surveyed users rely on. Account age still informs *account*
+// verification, where it belongs.
+func TestListingPromptOmitsAccountAge(t *testing.T) {
+	owner := &models.User{
+		Name: "Maria Santos", Role: models.RoleAgent,
+		VerificationStatus: models.VerificationVerified,
+		CreatedAt:          time.Now(), // brand new
+	}
+	got := listingPrompt(fullListing(), owner)
+	if contains(got, "account_age") {
+		t.Error("listing prompt includes account age; it makes the reviewer penalise new posters")
+	}
+	// The poster's verification and rating are still fair signals about a listing.
+	for _, want := range []string{"identity_verification", "rating"} {
+		if !contains(got, want) {
+			t.Errorf("listing prompt no longer mentions %q", want)
+		}
+	}
+}
+
+// Account verification is the right place to weigh how old an account is.
+func TestUserPromptKeepsAccountAge(t *testing.T) {
+	u := &models.User{Name: "Ramon Dela Cruz", Role: "user", CreatedAt: time.Now()}
+	if !contains(userPrompt(u), "account_age_days") {
+		t.Error("account prompt should still include account age")
+	}
+}

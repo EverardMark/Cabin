@@ -83,6 +83,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/listings", s.handleListListings)
 	mux.HandleFunc("GET /api/v1/listings/{id}", s.handleGetListing)
 	mux.HandleFunc("GET /api/v1/listings/{id}/price-comparison", s.handlePriceComparison)
+	mux.HandleFunc("GET /api/v1/feature-plans", s.handleFeaturePlans)
 	mux.HandleFunc("GET /api/v1/users/{id}", s.handleGetUser)
 	mux.HandleFunc("GET /api/v1/users/{id}/reviews", s.handleListReviews)
 
@@ -93,6 +94,9 @@ func (s *Server) Handler() http.Handler {
 	mux.Handle("POST /api/v1/listings/{id}/images", s.requireAuth(http.HandlerFunc(s.handleUploadImage)))
 	mux.Handle("POST /api/v1/listings/{id}/confirm", s.requireAuth(http.HandlerFunc(s.handleConfirmListing)))
 	mux.Handle("POST /api/v1/listings/{id}/report", s.requireAuth(http.HandlerFunc(s.handleReportListing)))
+	mux.Handle("POST /api/v1/listings/{id}/feature", s.requireAuth(http.HandlerFunc(s.handleFeatureListing)))
+	mux.Handle("DELETE /api/v1/listings/{id}/images/{imageId}", s.requireAuth(http.HandlerFunc(s.handleDeleteImage)))
+	mux.Handle("PUT /api/v1/listings/{id}/images/order", s.requireAuth(http.HandlerFunc(s.handleReorderImages)))
 
 	// Messaging
 	mux.Handle("POST /api/v1/listings/{id}/conversations", s.requireAuth(http.HandlerFunc(s.handleStartConversation)))

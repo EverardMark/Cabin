@@ -34,6 +34,10 @@ type Config struct {
 	VerifyModel string
 	// MaxUploadBytes caps a single image upload.
 	MaxUploadBytes int64
+	// PaymentProvider names the payment gateway used to sell featured listings
+	// (e.g. "paymongo"). Empty means none is wired up yet, which blocks paid
+	// promotion in production so it can never be given away by accident.
+	PaymentProvider string
 }
 
 // Load reads configuration from the environment, applying development-friendly
@@ -53,6 +57,7 @@ func Load() *Config {
 		AnthropicAPIKey: getEnv("ANTHROPIC_API_KEY", ""),
 		VerifyModel:     getEnv("VERIFY_MODEL", "claude-opus-5"),
 		MaxUploadBytes:  int64(getEnvInt("MAX_UPLOAD_MB", 10)) << 20,
+		PaymentProvider: getEnv("PAYMENT_PROVIDER", ""),
 	}
 
 	isProd := cfg.Env == "production"

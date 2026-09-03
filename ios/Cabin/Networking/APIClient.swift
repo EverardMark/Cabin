@@ -112,6 +112,26 @@ final class APIClient {
         try await send("api/v1/listings", method: "POST", body: body, authorized: true)
     }
 
+    func updateListing(id: String, _ body: ListingRequest) async throws -> Listing {
+        try await send("api/v1/listings/\(id)", method: "PUT", body: body, authorized: true)
+    }
+
+    func deleteListing(id: String) async throws {
+        try await performVoid(makeRequest("api/v1/listings/\(id)", method: "DELETE", authorized: true))
+    }
+
+    /// Removes one photo. The server re-screens the listing afterwards, since
+    /// photo count feeds the review.
+    func deleteImage(listingId: String, imageId: String) async throws -> Listing {
+        try await send("api/v1/listings/\(listingId)/images/\(imageId)", method: "DELETE", authorized: true)
+    }
+
+    /// Sets photo order — the first photo is the card thumbnail.
+    func reorderImages(listingId: String, imageIds: [String]) async throws -> Listing {
+        try await send("api/v1/listings/\(listingId)/images/order", method: "PUT",
+                       body: ReorderImagesRequest(imageIds: imageIds), authorized: true)
+    }
+
     func myListings() async throws -> ListingsResponse {
         try await send("api/v1/me/listings", authorized: true)
     }
@@ -125,6 +145,19 @@ final class APIClient {
         let _: EmptyResponse = try await send(
             "api/v1/listings/\(id)/report", method: "POST",
             body: ReportRequest(reason: reason, details: details), authorized: true)
+    }
+
+    // MARK: Featured listings
+
+    func featurePlans() async throws -> FeaturePlansResponse {
+        try await send("api/v1/feature-plans")
+    }
+
+    /// Buys promoted placement for a listing the caller owns.
+    func featureListing(id: String, planId: String) async throws -> FeatureResponse {
+        struct Body: Encodable { let planId: String } // encoded as "plan_id"
+        return try await send("api/v1/listings/\(id)/feature", method: "POST",
+                              body: Body(planId: planId), authorized: true)
     }
 
     func priceComparison(listingId: String) async throws -> PriceComparison {

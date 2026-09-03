@@ -208,12 +208,16 @@ struct ListingCard: View {
                 .clipShape(RoundedRectangle(cornerRadius: 16))
                 .overlay(alignment: .topLeading) {
                     // The trust badge leads, because trust is what buyers said
-                    // they decide on first.
-                    VerificationBadge(status: listing.verificationStatus)
-                        .padding(10)
-                        .background(
-                            Capsule().fill(Color(.systemBackground).opacity(0.92)).padding(6)
-                        )
+                    // they decide on first; promotion sits below it, never above.
+                    VStack(alignment: .leading, spacing: 4) {
+                        VerificationBadge(status: listing.verificationStatus)
+                            .background(Capsule().fill(Color(.systemBackground).opacity(0.92)).padding(-4))
+                        if listing.isFeatured {
+                            FeaturedBadge()
+                                .background(Capsule().fill(Color(.systemBackground).opacity(0.92)).padding(-4))
+                        }
+                    }
+                    .padding(12)
                 }
                 .overlay(alignment: .topTrailing) {
                     Pill(text: listing.listingType == "rent" ? "For rent" : "For sale")

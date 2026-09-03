@@ -126,6 +126,8 @@ struct Listing: Codable, Identifiable, Hashable {
     var verificationFlags: [String] = []
     var verifiedAt: String?
     var lastConfirmedAt: String?
+    /// When paid promotion expires. Promotion only counts while also verified.
+    var featuredUntil: String?
     var reportCount: Int = 0
     var viewCount: Int = 0
 
@@ -133,6 +135,17 @@ struct Listing: Codable, Identifiable, Hashable {
     var owner: UserSummary?
     var createdAt: String = ""
     var updatedAt: String = ""
+
+    /// True when this listing gets promoted placement.
+    ///
+    /// Deliberately gated on verification: paying buys reach, never credibility.
+    /// A listing that hasn't passed screening is never promoted, whatever its
+    /// owner paid.
+    var isFeatured: Bool {
+        guard verificationStatus == .verified,
+              let until = Format.date(from: featuredUntil ?? "") else { return false }
+        return until > Date()
+    }
 
     /// True when the owner has not confirmed availability in the last 30 days.
     /// "Outdated listings" was one of the most common complaints in the survey.
@@ -211,6 +224,29 @@ struct SavedSearch: Codable, Identifiable, Hashable {
     var newMatches: Int = 0
     var lastAlertedAt: String = ""
     var createdAt: String = ""
+}
+
+// MARK: - Featured listings
+
+/// A paid promotion package for a single listing.
+struct FeaturePlan: Codable, Identifiable, Hashable {
+    let id: String
+    let label: String
+    var days: Int = 0
+    var price: Int = 0
+}
+
+struct FeaturePlansResponse: Decodable {
+    let plans: [FeaturePlan]
+    var currency: String = "PHP"
+    var note: String = ""
+}
+
+struct FeatureResponse: Decodable {
+    let listing: Listing
+    var plan: FeaturePlan?
+    /// False while no payment provider is wired up, so the UI can say so.
+    var paid: Bool = false
 }
 
 // MARK: - Price comparison
@@ -305,6 +341,13 @@ struct ListingRequest: Encodable {
     let city: String
     let state: String
     let zipCode: String
+    /// A map pin is what makes a listing findable in map search.
+    var latitude: Double?
+    var longitude: Double?
+}
+
+struct ReorderImagesRequest: Encodable {
+    let imageIds: [String]
 }
 
 struct ProfileRequest: Encodable {

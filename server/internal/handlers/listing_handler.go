@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"cabin/internal/models"
 	"cabin/internal/store"
@@ -301,6 +302,7 @@ func (s *Server) handleMyListings(w http.ResponseWriter, r *http.Request) {
 	listings, total, err := s.listings.List(store.ListingFilter{
 		UserID:          userID,
 		IncludeRejected: true, // owners must see why their own listing was rejected
+		NoFeaturedBoost: true, // your own listings read better in plain date order
 		Page:            1,
 		PageSize:        100,
 	})
@@ -559,4 +561,162 @@ func applyInput(l *models.Listing, in *listingInput) error {
 		return errors.New("longitude must be between -180 and 180")
 	}
 	return nil
+}
+
+// --- featured listings (paid promotion) ---
+
+type featureInput struct {
+	PlanID string `json:"plan_id"`
+}
+
+// handleFeaturePlans lists the promotion packages a poster can buy.
+func (s *Server) handleFeaturePlans(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"plans":    models.FeaturePlans,
+		"currency": "PHP",
+		// Clients show this so nobody expects promotion to buy them a badge.
+		"note": "Featured placement boosts where your listing appears. It does not affect verification, and a listing that hasn't passed screening is never promoted.",
+	})
+}
+
+// handleFeatureListing activates paid promotion on the caller's listing.
+//
+// Promotion is sold per listing, not per month: the surveyed supply side is
+// mostly private owners with a single property. Featured listings were the one
+// unanimous ask among agents (6/6) and the top ask among owners (58%).
+func (s *Server) handleFeatureListing(w http.ResponseWriter, r *http.Request) {
+	// Until a gateway is wired up, this endpoint would hand out promotion for
+	// free. That is fine for local development and a hard no in production.
+	if s.cfg.Env == "production" && s.cfg.PaymentProvider == "" {
+		writeError(w, http.StatusNotImplemented,
+			"featured listings need a payment provider (set PAYMENT_PROVIDER)")
+		return
+	}
+
+	id := r.PathValue("id")
+	listing, err := s.listings.GetByID(id)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "listing not found")
+		return
+	}
+	if listing.UserID != userIDFrom(r.Context()) {
+		writeError(w, http.StatusForbidden, "you do not own this listing")
+		return
+	}
+
+	var in featureInput
+	if err := decodeJSON(w, r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	plan, ok := models.FeaturePlanByID(strings.TrimSpace(in.PlanID))
+	if !ok {
+		writeError(w, http.StatusBadRequest, "unknown plan_id")
+		return
+	}
+
+	// Selling promotion on an unscreened listing would mean paying to amplify
+	// something we have not checked — the exact behaviour that drove surveyed
+	// users off other platforms.
+	if listing.VerificationStatus != models.VerificationVerified {
+		writeError(w, http.StatusConflict,
+			"only verified listings can be promoted — wait for screening to finish, or fix the issues it found")
+		return
+	}
+
+	// Buying again while a promotion is live extends it rather than restarting.
+	from := time.Now()
+	if listing.FeaturedUntil != nil && listing.FeaturedUntil.After(from) {
+		from = *listing.FeaturedUntil
+	}
+	until := from.AddDate(0, 0, plan.Days)
+
+	if err := s.listings.SetFeatured(id, until); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not promote listing")
+		return
+	}
+	full, _ := s.listings.GetByID(id)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"listing": full,
+		"plan":    plan,
+		"paid":    s.cfg.PaymentProvider != "",
+	})
+}
+
+// --- photo management ---
+
+// ownedListing loads a listing and confirms the caller owns it.
+func (s *Server) ownedListing(w http.ResponseWriter, r *http.Request) (*models.Listing, bool) {
+	listing, err := s.listings.GetByID(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusNotFound, "listing not found")
+		return nil, false
+	}
+	if listing.UserID != userIDFrom(r.Context()) {
+		writeError(w, http.StatusForbidden, "you do not own this listing")
+		return nil, false
+	}
+	return listing, true
+}
+
+// handleDeleteImage removes one photo. Photo count feeds screening, so removing
+// one sends the listing back for review.
+func (s *Server) handleDeleteImage(w http.ResponseWriter, r *http.Request) {
+	listing, ok := s.ownedListing(w, r)
+	if !ok {
+		return
+	}
+	imageID := r.PathValue("imageId")
+	if err := s.listings.DeleteImage(listing.ID, imageID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "photo not found on this listing")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "could not delete photo")
+		return
+	}
+	if err := s.listings.RequeueVerification(listing.ID); err == nil {
+		s.worker.Enqueue(listing.ID)
+	}
+	full, _ := s.listings.GetByID(listing.ID)
+	writeJSON(w, http.StatusOK, full)
+}
+
+type reorderInput struct {
+	ImageIDs []string `json:"image_ids"`
+}
+
+// handleReorderImages sets the photo order. The first photo is the card
+// thumbnail, so being able to promote a better shot matters — "poor photos"
+// was the third-biggest complaint in the survey.
+func (s *Server) handleReorderImages(w http.ResponseWriter, r *http.Request) {
+	listing, ok := s.ownedListing(w, r)
+	if !ok {
+		return
+	}
+	var in reorderInput
+	if err := decodeJSON(w, r, &in); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if len(in.ImageIDs) == 0 {
+		writeError(w, http.StatusBadRequest, "image_ids is required")
+		return
+	}
+	// Every id must belong to this listing, or a caller could reshuffle someone
+	// else's photos by guessing ids.
+	for _, id := range in.ImageIDs {
+		img, err := s.listings.ImageByID(id)
+		if err != nil || img.ListingID != listing.ID {
+			writeError(w, http.StatusBadRequest, "one of those photos is not on this listing")
+			return
+		}
+	}
+	if err := s.listings.ReorderImages(listing.ID, in.ImageIDs); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not reorder photos")
+		return
+	}
+	// Reordering doesn't change what was reviewed, so the badge is kept.
+	full, _ := s.listings.GetByID(listing.ID)
+	writeJSON(w, http.StatusOK, full)
 }

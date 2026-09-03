@@ -104,6 +104,25 @@ func (s *ViewingStore) Reschedule(id string, at time.Time) error {
 	return nil
 }
 
+// AutoCompleteDue marks confirmed viewings as completed once their slot is well
+// past, and reports how many it moved.
+//
+// Completion is what unlocks reviews. Leaving it solely in the owner's hands
+// gave a badly-behaved owner a one-tap way to block a review of themselves, so
+// time closes the loop instead.
+func (s *ViewingStore) AutoCompleteDue(grace time.Duration) (int, error) {
+	cutoff := time.Now().Add(-grace).UTC().Format(time.RFC3339)
+	res, err := s.db.Exec(
+		`UPDATE viewing_requests SET status = 'completed', updated_at = ?
+		 WHERE status = 'confirmed' AND scheduled_for < ?`,
+		time.Now().UTC().Format(time.RFC3339), cutoff)
+	if err != nil {
+		return 0, err
+	}
+	n, _ := res.RowsAffected()
+	return int(n), nil
+}
+
 // CompletedBetween reports whether the two users ever completed a viewing
 // together — the precondition for leaving a review.
 func (s *ViewingStore) CompletedBetween(requesterID, ownerID string) (bool, error) {

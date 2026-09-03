@@ -87,7 +87,7 @@ REJECT signals (strong evidence of a scam or fake posting):
 FLAG signals (usable but the buyer deserves a warning):
 - Internally inconsistent details (title says 3 bedrooms, description says studio; area or price contradicts the property type)
 - Very thin description, or generic copy-paste text that says nothing specific about this property
-- No photos, or a photo count too low for the property type
+- No photos at all
 - Missing location detail that a serious buyer needs (no address and no city)
 - High-pressure urgency language ("today only", "first come first served, send fee now")
 - Price plausible but unusual enough to warrant a second look
@@ -97,6 +97,8 @@ VERIFY when the listing is internally consistent, specific enough to act on, pri
 Scoring: 0-100 trust score. 80-100 verified, 40-79 flagged, 0-39 rejected. Keep the score consistent with the status you choose.
 
 Be fair. A short but honest listing from a private owner is not a scam — reserve rejection for genuine scam signals, not for terseness or imperfect grammar. Filipino, Taglish, and mixed English/Tagalog listings are normal here and are not themselves a concern.
+
+Judge the listing, not the poster's tenure. This marketplace is new, so almost every account is recent and most have no reviews yet — a new or unreviewed poster is normal and must not be flagged for it. A handful of genuine photos is also normal; private owners often post two or three from a phone. Only a complete absence of photos is worth flagging. Do not invent concerns to justify a lower score: if a listing is specific, internally consistent, plausibly priced and shows no scam signals, verify it with no flags.
 
 The summary must be one plain sentence, under 140 characters, written for the buyer who sees it under the badge. Do not mention that you are an AI or describe your own process.
 
@@ -116,11 +118,12 @@ func verificationTool() anthropic.ToolUnionParam {
 					"enum":        []string{"verified", "flagged", "rejected"},
 					"description": "verified = trustworthy, flagged = usable but warn the buyer, rejected = scam or fake.",
 				},
+				// The API rejects "minimum"/"maximum" on an integer in a strict tool
+				// schema, so the range lives in the description; sanitize() clamps
+				// the value and reconciles it with the status.
 				"score": map[string]any{
 					"type":        "integer",
-					"minimum":     0,
-					"maximum":     100,
-					"description": "Trust score consistent with status: 80-100 verified, 40-79 flagged, 0-39 rejected.",
+					"description": "Trust score from 0 to 100, consistent with status: 80-100 verified, 40-79 flagged, 0-39 rejected.",
 				},
 				"summary": map[string]any{
 					"type":        "string",
@@ -207,7 +210,6 @@ func listingPrompt(l *models.Listing, owner *models.User) string {
 		fmt.Fprintf(&b, "role: %s\n", owner.Role)
 		fmt.Fprintf(&b, "identity_verification: %s\n", owner.VerificationStatus)
 		fmt.Fprintf(&b, "rating: %.1f from %d reviews\n", owner.RatingAvg, owner.RatingCount)
-		fmt.Fprintf(&b, "account_age_days: %d\n", int(time.Since(owner.CreatedAt).Hours()/24))
 	} else {
 		b.WriteString("unknown\n")
 	}

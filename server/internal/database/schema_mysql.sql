@@ -48,6 +48,7 @@ CREATE TABLE IF NOT EXISTS listings (
     verification_model   VARCHAR(64)  NOT NULL DEFAULT '',
     verified_at          VARCHAR(40)  NOT NULL DEFAULT '',
     last_confirmed_at    VARCHAR(40)  NOT NULL DEFAULT '',
+    featured_until       VARCHAR(40)  NOT NULL DEFAULT '',
     report_count         INT          NOT NULL DEFAULT 0,
     view_count           INT          NOT NULL DEFAULT 0,
     created_at           VARCHAR(40)  NOT NULL,
@@ -59,7 +60,8 @@ CREATE TABLE IF NOT EXISTS listings (
     INDEX idx_listings_created_at (created_at),
     INDEX idx_listings_verification (verification_status),
     INDEX idx_listings_geo (latitude, longitude),
-    INDEX idx_listings_price (price)
+    INDEX idx_listings_price (price),
+    INDEX idx_listings_featured (featured_until)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS listing_images (

@@ -36,6 +36,24 @@ struct VerificationBadge: View {
     }
 }
 
+/// Marks a promoted listing. Kept visually distinct from the verification badge
+/// so nobody reads "Featured" as a trust signal — it means the poster paid for
+/// placement, and it only ever appears on listings that already passed screening.
+struct FeaturedBadge: View {
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: "star.fill")
+            Text("Featured")
+        }
+        .font(.caption2.weight(.semibold))
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Color.cabinClay.opacity(0.18), in: Capsule())
+        .foregroundStyle(Color.cabinClay)
+        .accessibilityLabel("Featured listing — the poster paid for this placement")
+    }
+}
+
 /// Role label. Being an agent is self-declared at signup, so this is only an
 /// occupation label — the trust signal is `VerificationBadge`, never this.
 struct AgentBadge: View {

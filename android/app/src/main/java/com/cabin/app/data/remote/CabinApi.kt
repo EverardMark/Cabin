@@ -3,6 +3,9 @@ package com.cabin.app.data.remote
 import com.cabin.app.data.model.AuthResponse
 import com.cabin.app.data.model.Conversation
 import com.cabin.app.data.model.ConversationsResponse
+import com.cabin.app.data.model.FeaturePlansResponse
+import com.cabin.app.data.model.FeatureRequest
+import com.cabin.app.data.model.FeatureResponse
 import com.cabin.app.data.model.GoogleAuthRequest
 import com.cabin.app.data.model.HomeSummary
 import com.cabin.app.data.model.Listing
@@ -18,6 +21,7 @@ import com.cabin.app.data.model.PriceComparison
 import com.cabin.app.data.model.ProfileRequest
 import com.cabin.app.data.model.ProfileResponse
 import com.cabin.app.data.model.RegisterRequest
+import com.cabin.app.data.model.ReorderImagesRequest
 import com.cabin.app.data.model.ReportRequest
 import com.cabin.app.data.model.Review
 import com.cabin.app.data.model.ReviewRequest
@@ -104,8 +108,24 @@ interface CabinApi {
     @POST("api/v1/listings/{id}/report")
     suspend fun reportListing(@Path("id") id: String, @Body body: ReportRequest): Response<Unit>
 
+    /** Promotion packages a poster can buy. */
+    @GET("api/v1/feature-plans")
+    suspend fun featurePlans(): FeaturePlansResponse
+
+    /** Buys promoted placement for a listing the caller owns. */
+    @POST("api/v1/listings/{id}/feature")
+    suspend fun featureListing(@Path("id") id: String, @Body body: FeatureRequest): FeatureResponse
+
     @GET("api/v1/listings/{id}/price-comparison")
     suspend fun priceComparison(@Path("id") id: String): PriceComparison
+
+    /** Removes one photo; the server re-screens the listing afterwards. */
+    @DELETE("api/v1/listings/{id}/images/{imageId}")
+    suspend fun deleteImage(@Path("id") id: String, @Path("imageId") imageId: String): Listing
+
+    /** Sets photo order — the first photo is the card thumbnail. */
+    @PUT("api/v1/listings/{id}/images/order")
+    suspend fun reorderImages(@Path("id") id: String, @Body body: ReorderImagesRequest): Listing
 
     @Multipart
     @POST("api/v1/listings/{id}/images")

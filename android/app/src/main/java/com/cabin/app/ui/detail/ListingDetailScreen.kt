@@ -47,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cabin.app.data.model.Listing
+import com.cabin.app.data.model.FeaturePlan
 import com.cabin.app.data.model.PriceComparison
 import com.cabin.app.data.model.Verification
 import com.cabin.app.ui.common.FullScreenLoading
@@ -76,6 +77,7 @@ fun ListingDetailScreen(
     onBack: () -> Unit,
     onOpenConversation: (String) -> Unit,
     onOpenProfile: (String) -> Unit,
+    onEdit: (String) -> Unit,
     viewModel: ListingDetailViewModel = viewModel(),
 ) {
     LaunchedEffect(listingId) { viewModel.load(listingId) }
@@ -91,6 +93,7 @@ fun ListingDetailScreen(
 
     var showReport by remember { mutableStateOf(false) }
     var showBooking by remember { mutableStateOf(false) }
+    var showPromote by remember { mutableStateOf(false) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         when {
@@ -111,6 +114,11 @@ fun ListingDetailScreen(
                 onBook = { showBooking = true },
                 onReport = { showReport = true },
                 onConfirm = viewModel::confirmAvailability,
+                onPromote = {
+                    viewModel.loadFeaturePlans()
+                    showPromote = true
+                },
+                onEdit = { onEdit(listingId) },
                 onOpenProfile = onOpenProfile,
             )
         }
@@ -122,6 +130,19 @@ fun ListingDetailScreen(
             onSubmit = { reason, details ->
                 viewModel.report(reason, details)
                 showReport = false
+            },
+        )
+    }
+
+    if (showPromote) {
+        PromoteDialog(
+            plans = state.featurePlans,
+            note = state.featureNote,
+            busy = state.busy,
+            onDismiss = { showPromote = false },
+            onSubmit = { planId ->
+                viewModel.featureListing(planId)
+                showPromote = false
             },
         )
     }
@@ -157,6 +178,8 @@ private fun ListingDetailContent(
     onBook: () -> Unit,
     onReport: () -> Unit,
     onConfirm: () -> Unit,
+    onPromote: () -> Unit,
+    onEdit: () -> Unit,
     onOpenProfile: (String) -> Unit,
 ) {
     Column(
@@ -302,6 +325,39 @@ private fun ListingDetailContent(
 
             Spacer(Modifier.height(24.dp))
             if (isMine) {
+                if (listing.isFeatured) {
+                    Text(
+                        "Featured until ${Format.dateTime(listing.featuredUntil)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.tertiary,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+                // Editing is the repair path for a flagged listing — the trust
+                // panel tells owners what to fix, so it has to be reachable.
+                PrimaryButton(
+                    text = "Edit listing",
+                    onClick = onEdit,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedButton(
+                    onClick = onPromote,
+                    enabled = listing.verificationStatus == Verification.VERIFIED && !busy,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) {
+                    Text(if (listing.isFeatured) "Extend featuring" else "Feature this listing")
+                }
+                if (listing.verificationStatus != Verification.VERIFIED) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Only verified listings can be featured. Featuring buys placement, not a badge — so a listing has to pass screening first.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
                 if (Format.isStale(listing.lastConfirmedAt, listing.createdAt)) {
                     Text(
                         "Buyers see a warning on listings that haven't been confirmed recently.",
@@ -500,4 +556,70 @@ private fun Feature(value: String, label: String) {
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
         )
     }
+}
+
+
+/**
+ * Buying promoted placement for a listing you own. Featured listings were the
+ * survey's one unanimous supply-side ask — every agent picked it (6/6), and 58%
+ * of owners did. Sold per listing, since most posters here have one property.
+ */
+@Composable
+private fun PromoteDialog(
+    plans: List<FeaturePlan>,
+    note: String,
+    busy: Boolean,
+    onDismiss: () -> Unit,
+    onSubmit: (String) -> Unit,
+) {
+    var selected by remember(plans) { mutableStateOf(plans.firstOrNull()?.id) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Feature listing") },
+        text = {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                if (plans.isEmpty()) {
+                    Text("Loading packages…", style = MaterialTheme.typography.bodyMedium)
+                } else {
+                    plans.forEach { plan ->
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            RadioButton(selected = selected == plan.id, onClick = { selected = plan.id })
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(plan.label, style = MaterialTheme.typography.bodyMedium)
+                                Text(
+                                    "${plan.days} days of promoted placement",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(
+                                Format.price(plan.price, "sale"),
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+                if (note.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        note,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { selected?.let(onSubmit) },
+                enabled = selected != null && !busy,
+            ) { Text("Continue") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

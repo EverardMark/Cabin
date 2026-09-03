@@ -45,6 +45,7 @@ auto-loaded — export them or use your process manager.
 | `ANTHROPIC_API_KEY` | – | Enables Claude-backed screening; empty falls back to the built-in rule check |
 | `VERIFY_MODEL` | `claude-opus-5` | Model used for listing and account review |
 | `MAX_UPLOAD_MB` | `10` | Hard cap on a single image upload |
+| `PAYMENT_PROVIDER` | – | Payment gateway for featured listings. Empty blocks paid promotion in production so it can't be given away |
 | `GOOGLE_CLIENT_ID` | – | Comma-separated accepted Google client IDs (Web, iOS, Android) |
 
 ## Architecture
@@ -86,9 +87,13 @@ Base path `/api/v1`. Send `Authorization: Bearer <token>` for authenticated rout
 | `PUT` | `/listings/{id}` | ✓ | Update (owner only; content edits re-trigger screening) |
 | `DELETE` | `/listings/{id}` | ✓ | Delete (owner only) |
 | `POST` | `/listings/{id}/images` | ✓ | `multipart/form-data`, field `image`; capped by `MAX_UPLOAD_MB` |
+| `DELETE` | `/listings/{id}/images/{imageId}` | ✓ | Remove a photo; re-queues screening and closes the ordering gap |
+| `PUT` | `/listings/{id}/images/order` | ✓ | `{image_ids}` — explicit photo order; first is the thumbnail |
 | `POST` | `/listings/{id}/confirm` | ✓ | Owner confirms still available |
 | `POST` | `/listings/{id}/report` | ✓ | `{reason, details?}`; 3 open reports force re-screening |
 | `GET` | `/listings/{id}/price-comparison` | | Median/min/max vs. similar nearby listings |
+| `GET` | `/feature-plans` | | Promotion packages and their prices |
+| `POST` | `/listings/{id}/feature` | ✓ | `{plan_id}`; owner only, verified listings only (409 otherwise) |
 | `POST` | `/listings/{id}/conversations` | ✓ | Open or reuse a chat thread |
 | `GET` | `/conversations` | ✓ | Threads with unread counts |
 | `GET` | `/conversations/{id}/messages` | ✓ | Messages; also marks them read |
@@ -169,6 +174,38 @@ accounts claiming to be agents — a licence number.
 
 **Cost.** One short Claude call per listing at `medium` effort, with the system prompt
 cached across reviews. Set `VERIFY_MODEL` to use a cheaper model if volume grows.
+
+## Featured listings
+
+Paid promotion, sold per listing. Featured listings were the survey's one unanimous
+supply-side ask (6/6 agents, 58% of owners).
+
+`featured_until` on a listing records when promotion expires, and promoted listings lead
+**every** sort order. The load-bearing rule is enforced in two places:
+
+- `POST /listings/{id}/feature` refuses (409) unless the listing is currently `verified`.
+- The ordering itself re-checks verification, so a listing that later drops to `flagged`
+  or `rejected` loses its placement immediately even though its paid time keeps running.
+
+Together those mean the marketplace can never amplify something it has not screened —
+which is exactly the behaviour respondents said drove them off other platforms.
+
+`/me/listings` opts out of the promotion boost (`NoFeaturedBoost`), since your own
+listings read better in plain date order.
+
+Without `PAYMENT_PROVIDER` set, the endpoint grants promotion for free and returns
+`"paid": false` so clients can say no money changed hands; in `ENV=production` it returns
+501 instead.
+
+## Viewing auto-completion
+
+A background sweep (every 30 minutes, plus once at startup) marks `confirmed` viewings
+`completed` once they are more than 24 hours past their slot.
+
+Completion unlocks reviews. Leaving it solely with the listing owner meant a
+badly-behaved owner could block a review of themselves by simply never marking the
+viewing done — the people most deserving of a bad review had a one-tap way to prevent
+it. `cancelled`, `declined` and `requested` viewings are never touched.
 
 ## Database backends (SQLite / MySQL)
 

@@ -14,6 +14,8 @@ struct ListingDetailView: View {
     @State private var openedConversation: Conversation?
     @State private var actionError: String?
     @State private var confirmingAvailability = false
+    @State private var showPromote = false
+    @State private var showEdit = false
 
     private var isMine: Bool { listing?.userId == appState.currentUser?.id }
 
@@ -109,6 +111,19 @@ struct ListingDetailView: View {
         .sheet(isPresented: $showBooking) {
             BookViewingSheet(listing: listing)
         }
+        .sheet(isPresented: $showPromote) {
+            PromoteListingSheet(listing: listing) { updated in
+                self.listing = updated
+            }
+        }
+        .sheet(isPresented: $showEdit) {
+            NavigationStack {
+                EditListingView(listing: listing) { updated in
+                    self.listing = updated
+                    Task { await load() }
+                }
+            }
+        }
         .alert("Something went wrong", isPresented: .constant(actionError != nil)) {
             Button("OK") { actionError = nil }
         } message: {
@@ -149,10 +164,46 @@ struct ListingDetailView: View {
         .padding(.top, 8)
     }
 
-    /// What the owner sees instead: keep the listing fresh.
+    /// What the owner sees instead: keep the listing fresh, and promote it.
     @ViewBuilder
     private func ownerActions(_ listing: Listing) -> some View {
         VStack(spacing: 10) {
+            if listing.isFeatured, let until = Format.date(from: listing.featuredUntil ?? "") {
+                Label("Featured until \(until.formatted(.dateTime.day().month(.abbreviated)))",
+                      systemImage: "star.fill")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Color.cabinClay)
+            }
+
+            // Editing is the repair path for a flagged listing — the trust
+            // panel tells owners what to fix, so it has to be reachable.
+            Button {
+                showEdit = true
+            } label: {
+                Label("Edit listing", systemImage: "pencil")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+
+            Button {
+                showPromote = true
+            } label: {
+                Label(listing.isFeatured ? "Extend featuring" : "Feature this listing",
+                      systemImage: "star")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.large)
+            .tint(.cabinClay)
+            .disabled(listing.verificationStatus != .verified)
+
+            if listing.verificationStatus != .verified {
+                Text("Only verified listings can be featured. Featuring buys placement, not a badge — so a listing has to pass screening first.")
+                    .font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             if listing.isStale {
                 Text("Buyers are shown a warning on listings that haven't been confirmed recently.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -380,6 +431,117 @@ struct ReportListingSheet: View {
             try await appState.api.reportListing(id: listingId, reason: reason, details: details)
             await onDone()
             dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        submitting = false
+    }
+}
+
+
+/// Buying promoted placement for a listing you own.
+///
+/// Featured listings were the survey's one unanimous supply-side ask — every
+/// agent picked it (6/6), and 58% of owners did. It is sold per listing rather
+/// than per month because most posters here have a single property.
+struct PromoteListingSheet: View {
+    let listing: Listing
+    var onPromoted: (Listing) -> Void
+
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var plans: [FeaturePlan] = []
+    @State private var note = ""
+    @State private var selected: String?
+    @State private var loading = true
+    @State private var submitting = false
+    @State private var errorMessage: String?
+    @State private var unpaidNotice = false
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                if loading {
+                    HStack { Spacer(); ProgressView(); Spacer() }
+                } else {
+                    Section("Choose a package") {
+                        ForEach(plans) { plan in
+                            Button {
+                                selected = plan.id
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(plan.label).font(.subheadline.weight(.medium))
+                                        Text("\(plan.days) days of promoted placement")
+                                            .font(.caption).foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    Text(Format.price(plan.price, listingType: "sale"))
+                                        .font(.subheadline.weight(.semibold))
+                                        .foregroundStyle(Color.cabinForest)
+                                    Image(systemName: selected == plan.id ? "checkmark.circle.fill" : "circle")
+                                        .foregroundStyle(selected == plan.id ? Color.cabinForest : .secondary)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+
+                    if !note.isEmpty {
+                        Section {
+                            Text(note).font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                if let errorMessage {
+                    Section { Text(errorMessage).font(.footnote).foregroundStyle(.red) }
+                }
+            }
+            .navigationTitle("Feature listing")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Continue") { Task { await promote() } }
+                        .disabled(selected == nil || submitting)
+                }
+            }
+            .alert("Promotion active", isPresented: $unpaidNotice) {
+                Button("OK") { dismiss() }
+            } message: {
+                Text("Your listing is now featured. No payment was taken — checkout isn't connected yet.")
+            }
+            .task { await loadPlans() }
+        }
+    }
+
+    private func loadPlans() async {
+        do {
+            let res = try await appState.api.featurePlans()
+            plans = res.plans
+            note = res.note
+            selected = res.plans.first?.id
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        loading = false
+    }
+
+    private func promote() async {
+        guard let planId = selected else { return }
+        submitting = true
+        errorMessage = nil
+        do {
+            let res = try await appState.api.featureListing(id: listing.id, planId: planId)
+            onPromoted(res.listing)
+            if res.paid {
+                dismiss()
+            } else {
+                // Be honest rather than implying money changed hands.
+                unpaidNotice = true
+            }
         } catch {
             errorMessage = error.localizedDescription
         }

@@ -74,6 +74,8 @@ func applyColumnMigrations(db *sql.DB, driver string) error {
 		fmt.Sprintf("ALTER TABLE listings ADD COLUMN last_confirmed_at %s NOT NULL DEFAULT ''", stamp),
 		fmt.Sprintf("ALTER TABLE listings ADD COLUMN report_count %s NOT NULL DEFAULT 0", integer),
 		fmt.Sprintf("ALTER TABLE listings ADD COLUMN view_count %s NOT NULL DEFAULT 0", integer),
+		// Paid promotion: the survey's one unanimous supply-side ask.
+		fmt.Sprintf("ALTER TABLE listings ADD COLUMN featured_until %s NOT NULL DEFAULT ''", stamp),
 	}
 	for _, stmt := range alters {
 		if _, err := db.Exec(stmt); err != nil {

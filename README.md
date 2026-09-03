@@ -47,6 +47,7 @@ findings, and what each one became:
 | **39%** want agent ratings & reviews | Reviews you can only write after **completing a viewing** with someone |
 | "Outdated listings" (recurring free-text complaint) | Freshness tracking, a stale warning, and a one-tap "still available" confirm |
 | Saved searches / instant alerts (free-text) | Saved searches with a new-match count |
+| **Featured listings** — 6/6 agents, 58% of owners | Paid promotion, sold per listing |
 
 ## Features
 
@@ -60,7 +61,9 @@ findings, and what each one became:
 - ⭐ **Reviews** — earned by completing a viewing, not open to anyone
 - 📊 **Price check** — how a listing compares to similar nearby ones
 - 🔔 **Saved searches** — re-run a filter and see what's new
+- ⭐ **Featured listings** — paid promotion that boosts placement, never credibility
 - ➕ **Posting for everyone** — owners, agents and renters can all post, with a live quality checklist
+- ✏️ **Full listing management** — edit, delete, set a map pin, and add/remove/reorder photos
 - 🌱 **Seed data** — demo accounts and Philippine sample listings on first run
 
 ---
@@ -174,9 +177,13 @@ Base path: `/api/v1`. Authenticated endpoints require `Authorization: Bearer <to
 | `PUT` | `/listings/{id}` | ✓ | Update (owner only; content edits trigger re-screening) |
 | `DELETE` | `/listings/{id}` | ✓ | Delete (owner only) |
 | `POST` | `/listings/{id}/images` | ✓ | Upload an image (multipart, field `image`, max 10MB) |
+| `DELETE` | `/listings/{id}/images/{imageId}` | ✓ | Remove a photo (re-triggers screening) |
+| `PUT` | `/listings/{id}/images/order` | ✓ | Reorder photos — the first is the thumbnail |
 | `POST` | `/listings/{id}/confirm` | ✓ | Confirm still available (clears the stale warning) |
 | `POST` | `/listings/{id}/report` | ✓ | Report a scam or misleading listing |
 | `GET` | `/listings/{id}/price-comparison` | | Price vs. similar nearby listings |
+| `GET` | `/feature-plans` | | Promotion packages a poster can buy |
+| `POST` | `/listings/{id}/feature` | ✓ | Buy promoted placement (verified listings only) |
 | `GET` | `/me/listings` | ✓ | Your listings (including rejected ones) |
 
 **Browse query parameters:** `q`, `city`, `property_type`, `listing_type`, `status`,
@@ -217,6 +224,48 @@ Uploaded images are served from `/uploads/<file>`. Full API details:
 [`server/README.md`](server/README.md).
 
 ---
+
+## Monetization
+
+Promotion is the one thing the survey was unanimous about on the supply side:
+**every agent (6/6) and 58% of owners** picked "featured listings" as what they would
+pay for. It is sold **per listing**, not per month, because most posters here have a
+single property — acceptable spend clustered at ₱500–1,000 for owners and ₱1,000–3,000
+for agents.
+
+Starting packages (in `models.FeaturePlans`, to validate against real conversions):
+₱299 / 7 days · ₱499 / 14 days · ₱899 / 30 days.
+
+**The rule that makes this safe: paying buys reach, never credibility.**
+
+- Only a **verified** listing can be promoted — `POST /listings/{id}/feature` returns 409
+  otherwise.
+- If a promoted listing later loses verification (an edit, or three reports triggering
+  re-screening) it **silently loses its placement** while its paid time keeps running.
+- The "Featured" badge is styled distinctly from the verification badge, and the plan
+  picker says so, so nobody reads promotion as a trust signal.
+
+We deliberately **do not sell the verified badge**, even though 46% of buyers said they'd
+pay for one. If verified meant *paid*, unverified would mean *didn't pay* rather than
+*didn't pass* — and the trust signal this whole app is built on would be worth nothing.
+
+**No payment gateway is wired up yet.** In development the endpoint grants promotion
+without charging and reports `"paid": false` so the clients say so plainly. In
+production it returns 501 until `PAYMENT_PROVIDER` is set, so promotion can never be
+given away by accident.
+
+## Two design decisions worth knowing
+
+**Editing is the repair path.** Screening tells an owner exactly why a listing was
+flagged, so the app has to let them act on it. Editing reviewed content — or removing a
+photo, since photo count feeds the review — sends the listing back for a fresh check, so
+a badge can never be inherited by different content.
+
+**Viewings auto-complete 24 hours after their slot.** Completing a viewing is what
+unlocks reviews. Leaving that solely with the listing owner gave a badly-behaved owner a
+one-tap way to block a review of themselves, so time closes the loop instead. A
+background sweep promotes `confirmed` viewings past their grace period; cancelled and
+declined ones are never touched.
 
 ## What the verified badge does and doesn't mean
 

@@ -77,6 +77,32 @@ fun VerificationBadge(status: String, modifier: Modifier = Modifier, compact: Bo
     }
 }
 
+/**
+ * Marks a promoted listing. Kept visually distinct from the verification badge
+ * so nobody reads "Featured" as a trust signal — it means the poster paid for
+ * placement, and it only appears on listings that already passed screening.
+ */
+@Composable
+fun FeaturedBadge(modifier: Modifier = Modifier) {
+    val tint = MaterialTheme.colorScheme.tertiary
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+        modifier = modifier
+            .clip(RoundedCornerShape(50))
+            .background(tint.copy(alpha = 0.18f))
+            .padding(horizontal = 8.dp, vertical = 3.dp),
+    ) {
+        Icon(Icons.Filled.Star, contentDescription = null, tint = tint, modifier = Modifier.size(12.dp))
+        Text(
+            "Featured",
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = tint,
+        )
+    }
+}
+
 /** Star rating with the review count. */
 @Composable
 fun RatingStars(rating: Double, count: Int, modifier: Modifier = Modifier) {

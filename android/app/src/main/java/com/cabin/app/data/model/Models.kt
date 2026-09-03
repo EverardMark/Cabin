@@ -111,6 +111,8 @@ data class Listing(
     val verificationFlags: List<String> = emptyList(),
     val verifiedAt: String? = null,
     val lastConfirmedAt: String? = null,
+    /** When paid promotion expires. Only counts while also verified. */
+    val featuredUntil: String? = null,
     val reportCount: Int = 0,
     val viewCount: Int = 0,
     val images: List<ListingImage> = emptyList(),
@@ -119,6 +121,20 @@ data class Listing(
     val updatedAt: String = "",
 ) {
     val isVerified: Boolean get() = verificationStatus == Verification.VERIFIED
+
+    /**
+     * Whether this listing gets promoted placement.
+     *
+     * Deliberately gated on verification: paying buys reach, never credibility.
+     * A listing that hasn't passed screening is never promoted, whatever its
+     * owner paid.
+     */
+    val isFeatured: Boolean
+        get() {
+            if (!isVerified) return false
+            val until = runCatching { java.time.Instant.parse(featuredUntil) }.getOrNull() ?: return false
+            return until.isAfter(java.time.Instant.now())
+        }
 }
 
 @Serializable
@@ -185,6 +201,37 @@ data class SavedSearch(
     val lastAlertedAt: String = "",
     val createdAt: String = "",
 )
+
+/**
+ * A paid promotion package for a single listing. Featured listings were the
+ * survey's one unanimous supply-side ask — every agent picked it (6/6), and 58%
+ * of owners did.
+ */
+@Serializable
+data class FeaturePlan(
+    val id: String,
+    val label: String,
+    val days: Int = 0,
+    val price: Long = 0,
+)
+
+@Serializable
+data class FeaturePlansResponse(
+    val plans: List<FeaturePlan> = emptyList(),
+    val currency: String = "PHP",
+    val note: String = "",
+)
+
+@Serializable
+data class FeatureResponse(
+    val listing: Listing,
+    val plan: FeaturePlan? = null,
+    /** False while no payment provider is wired up, so the UI can say so. */
+    val paid: Boolean = false,
+)
+
+@Serializable
+data class FeatureRequest(val planId: String)
 
 /** Price context for a listing — 46% of respondents asked for comparison tools. */
 @Serializable
@@ -335,7 +382,13 @@ data class ListingRequest(
     val state: String,
     val zipCode: String,
     val status: String? = null,
+    /** A map pin is what makes a listing findable in map search. */
+    val latitude: Double? = null,
+    val longitude: Double? = null,
 )
+
+@Serializable
+data class ReorderImagesRequest(val imageIds: List<String>)
 
 @Serializable
 data class ReportRequest(val reason: String, val details: String = "")

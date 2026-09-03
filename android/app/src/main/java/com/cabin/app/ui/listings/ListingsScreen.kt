@@ -49,6 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.cabin.app.data.model.Listing
+import com.cabin.app.ui.common.FeaturedBadge
 import com.cabin.app.ui.common.FullScreenLoading
 import com.cabin.app.ui.common.FullScreenMessage
 import com.cabin.app.ui.common.NetworkImage
@@ -305,15 +306,27 @@ fun ListingCard(listing: Listing, onClick: () -> Unit, modifier: Modifier = Modi
                     .aspectRatio(16f / 10f),
             )
             // The trust badge leads, because trust is what buyers said they
-            // decide on first.
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(50))
-                    .background(MaterialTheme.colorScheme.surface),
+            // decide on first; promotion sits below it, never above.
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
             ) {
-                VerificationBadge(listing.verificationStatus)
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.surface),
+                ) {
+                    VerificationBadge(listing.verificationStatus)
+                }
+                if (listing.isFeatured) {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(MaterialTheme.colorScheme.surface),
+                    ) {
+                        FeaturedBadge()
+                    }
+                }
             }
             Pill(
                 text = Format.price(listing.price, listing.listingType),

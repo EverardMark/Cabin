@@ -2,6 +2,9 @@ package com.cabin.app.data
 
 import com.cabin.app.data.model.Conversation
 import com.cabin.app.data.model.GoogleAuthRequest
+import com.cabin.app.data.model.FeaturePlansResponse
+import com.cabin.app.data.model.FeatureRequest
+import com.cabin.app.data.model.FeatureResponse
 import com.cabin.app.data.model.HomeSummary
 import com.cabin.app.data.model.Listing
 import com.cabin.app.data.model.ListingFilters
@@ -15,6 +18,7 @@ import com.cabin.app.data.model.PriceComparison
 import com.cabin.app.data.model.ProfileRequest
 import com.cabin.app.data.model.PublicProfile
 import com.cabin.app.data.model.RegisterRequest
+import com.cabin.app.data.model.ReorderImagesRequest
 import com.cabin.app.data.model.ReportRequest
 import com.cabin.app.data.model.Review
 import com.cabin.app.data.model.ReviewRequest
@@ -148,6 +152,23 @@ class CabinRepository(
         api.createListing(request)
     }
 
+    suspend fun updateListing(id: String, request: ListingRequest): Result<Listing> = runCatching {
+        api.updateListing(id, request)
+    }
+
+    suspend fun deleteListing(id: String): Result<Unit> = runCatching {
+        val res = api.deleteListing(id)
+        if (!res.isSuccessful) error("Delete failed (${res.code()})")
+    }
+
+    suspend fun deleteImage(listingId: String, imageId: String): Result<Listing> = runCatching {
+        api.deleteImage(listingId, imageId)
+    }
+
+    suspend fun reorderImages(listingId: String, imageIds: List<String>): Result<Listing> = runCatching {
+        api.reorderImages(listingId, ReorderImagesRequest(imageIds))
+    }
+
     suspend fun myListings(): Result<List<Listing>> = runCatching { api.myListings().listings }
 
     suspend fun confirmListing(id: String): Result<Listing> = runCatching { api.confirmListing(id) }
@@ -155,6 +176,12 @@ class CabinRepository(
     suspend fun reportListing(id: String, reason: String, details: String): Result<Unit> = runCatching {
         val res = api.reportListing(id, ReportRequest(reason, details))
         if (!res.isSuccessful) error("Report failed (${res.code()})")
+    }
+
+    suspend fun featurePlans(): Result<FeaturePlansResponse> = runCatching { api.featurePlans() }
+
+    suspend fun featureListing(id: String, planId: String): Result<FeatureResponse> = runCatching {
+        api.featureListing(id, FeatureRequest(planId))
     }
 
     suspend fun priceComparison(listingId: String): Result<PriceComparison> = runCatching {

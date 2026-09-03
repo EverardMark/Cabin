@@ -24,6 +24,37 @@ import (
 	"cabin/internal/verify"
 )
 
+// viewingGrace is how long after its scheduled time a confirmed viewing is
+// treated as done. Completion unlocks reviews, and leaving it solely to the
+// owner let a bad actor block reviews of themselves by never marking it.
+const viewingGrace = 24 * time.Hour
+
+// runViewingMaintenance closes out past viewings until ctx is cancelled.
+func runViewingMaintenance(ctx context.Context, viewings *store.ViewingStore) {
+	sweep := func() {
+		n, err := viewings.AutoCompleteDue(viewingGrace)
+		if err != nil {
+			log.Printf("viewing maintenance: %v", err)
+			return
+		}
+		if n > 0 {
+			log.Printf("viewing maintenance: auto-completed %d past viewing(s)", n)
+		}
+	}
+	sweep() // clear any backlog from downtime
+
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sweep()
+		}
+	}
+}
+
 func main() {
 	cfg := config.Load()
 
@@ -86,6 +117,7 @@ func main() {
 	workerCtx, stopWorker := context.WithCancel(context.Background())
 	defer stopWorker()
 	go worker.Run(workerCtx)
+	go runViewingMaintenance(workerCtx, viewings)
 
 	httpServer := &http.Server{
 		Addr:              ":" + cfg.Port,

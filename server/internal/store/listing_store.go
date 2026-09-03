@@ -52,9 +52,12 @@ type ListingFilter struct {
 	// search alerts to count new matches.
 	CreatedAfter *time.Time
 
-	Sort     string // "recent" (default), "oldest", "price_asc", "price_desc", "trusted", "distance"
-	Page     int
-	PageSize int
+	Sort string // "recent" (default), "oldest", "price_asc", "price_desc", "trusted", "distance"
+	// NoFeaturedBoost disables promoted-first ordering. Used where promotion
+	// would distort the result, e.g. the price-comparison sample.
+	NoFeaturedBoost bool
+	Page            int
+	PageSize        int
 }
 
 // listingColumns is the shared SELECT list joining the owner's public fields.
@@ -62,7 +65,8 @@ const listingColumns = `l.id, l.user_id, l.title, l.description, l.price, l.curr
 	l.property_type, l.listing_type, l.bedrooms, l.bathrooms, l.area_sqft,
 	l.address, l.city, l.state, l.zip_code, l.latitude, l.longitude, l.status,
 	l.verification_status, l.verification_score, l.verification_summary, l.verification_flags,
-	l.verification_model, l.verified_at, l.last_confirmed_at, l.report_count, l.view_count,
+	l.verification_model, l.verified_at, l.last_confirmed_at, l.featured_until,
+	l.report_count, l.view_count,
 	l.created_at, l.updated_at,
 	u.name, u.email, u.role, u.verification_status, u.rating_avg, u.rating_count`
 
@@ -190,8 +194,29 @@ func (f ListingFilter) buildWhere() (string, []any) {
 	return strings.Join(where, " AND "), args
 }
 
-// orderBy renders the ORDER BY clause and any arguments it needs.
+// featuredFirst is the leading ORDER BY term: promoted listings surface above
+// the rest, but only while they are still verified and the promotion is live.
+// Paying buys position, never credibility.
+func featuredFirst() (string, []any) {
+	return "CASE WHEN l.featured_until > ? AND l.verification_status = ? THEN 0 ELSE 1 END ASC, ",
+		[]any{time.Now().UTC().Format(time.RFC3339), models.VerificationVerified}
+}
+
+// orderBy renders the ORDER BY clause and any arguments it needs. Promoted
+// listings lead every ordering.
 func (f ListingFilter) orderBy() (string, []any) {
+	lead, leadArgs := featuredFirst()
+	if f.NoFeaturedBoost {
+		lead, leadArgs = "", nil
+	}
+	expr, args := f.sortExpr()
+	// A final unique tiebreak keeps ordering deterministic when sort keys tie
+	// (listings posted in the same second), which pagination depends on.
+	return lead + expr + ", l.id DESC", append(leadArgs, args...)
+}
+
+// sortExpr is the user-chosen ordering, without the promotion term.
+func (f ListingFilter) sortExpr() (string, []any) {
 	switch f.Sort {
 	case "oldest":
 		return "l.created_at ASC", nil
@@ -329,6 +354,22 @@ func (s *ListingStore) Delete(id string) error {
 func (s *ListingStore) ConfirmAvailability(id string) error {
 	res, err := s.db.Exec(`UPDATE listings SET last_confirmed_at = ?, updated_at = ? WHERE id = ?`,
 		time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339), id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetFeatured activates paid promotion on a listing until the given time.
+// Promotion still only takes effect while the listing is verified, which is
+// enforced in the ordering rather than here, so a listing that later fails
+// re-screening silently loses its boost without losing paid time.
+func (s *ListingStore) SetFeatured(id string, until time.Time) error {
+	res, err := s.db.Exec(`UPDATE listings SET featured_until = ?, updated_at = ? WHERE id = ?`,
+		until.UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339), id)
 	if err != nil {
 		return err
 	}
@@ -642,6 +683,78 @@ func (s *ListingStore) AddImage(img *models.ListingImage) error {
 	return err
 }
 
+// ImageByID loads one image, so a caller can check it belongs to the listing.
+func (s *ListingStore) ImageByID(id string) (*models.ListingImage, error) {
+	var img models.ListingImage
+	var created string
+	err := s.db.QueryRow(
+		`SELECT id, listing_id, url, sort_order, created_at FROM listing_images WHERE id = ?`, id,
+	).Scan(&img.ID, &img.ListingID, &img.URL, &img.Position, &created)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	img.CreatedAt, _ = time.Parse(time.RFC3339, created)
+	return &img, nil
+}
+
+// DeleteImage removes a photo and closes the gap it left in the ordering, so
+// positions stay contiguous and the first photo is always the thumbnail.
+func (s *ListingStore) DeleteImage(listingID, imageID string) error {
+	res, err := s.db.Exec(`DELETE FROM listing_images WHERE id = ? AND listing_id = ?`, imageID, listingID)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return s.resequence(listingID)
+}
+
+// ReorderImages applies an explicit order. Any image of the listing missing from
+// ids keeps its relative position after the ones listed.
+func (s *ListingStore) ReorderImages(listingID string, ids []string) error {
+	for i, id := range ids {
+		if _, err := s.db.Exec(
+			`UPDATE listing_images SET sort_order = ? WHERE id = ? AND listing_id = ?`,
+			i, id, listingID); err != nil {
+			return err
+		}
+	}
+	return s.resequence(listingID)
+}
+
+// resequence renumbers a listing's images 0..n-1 in their current order.
+func (s *ListingStore) resequence(listingID string) error {
+	rows, err := s.db.Query(
+		`SELECT id FROM listing_images WHERE listing_id = ? ORDER BY sort_order ASC, created_at ASC`,
+		listingID)
+	if err != nil {
+		return err
+	}
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		ids = append(ids, id)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i, id := range ids {
+		if _, err := s.db.Exec(`UPDATE listing_images SET sort_order = ? WHERE id = ?`, i, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // CountAll returns the total number of listings (used to decide whether to seed).
 func (s *ListingStore) CountAll() (int, error) {
 	var n int
@@ -688,7 +801,7 @@ func (s *ListingStore) imagesFor(ids []string) (map[string][]models.ListingImage
 func scanListing(sc rowScanner) (*models.Listing, error) {
 	var l models.Listing
 	var lat, lng sql.NullFloat64
-	var created, updated, verifiedAt, lastConfirmed, flagsJSON string
+	var created, updated, verifiedAt, lastConfirmed, featuredUntil, flagsJSON string
 	var ownerName, ownerEmail, ownerRole, ownerVerification string
 	var ownerRating float64
 	var ownerRatingCount int
@@ -698,7 +811,8 @@ func scanListing(sc rowScanner) (*models.Listing, error) {
 		&l.PropertyType, &l.ListingType, &l.Bedrooms, &l.Bathrooms, &l.AreaSqft,
 		&l.Address, &l.City, &l.State, &l.ZipCode, &lat, &lng, &l.Status,
 		&l.VerificationStatus, &l.VerificationScore, &l.VerificationSummary, &flagsJSON,
-		&l.VerificationModel, &verifiedAt, &lastConfirmed, &l.ReportCount, &l.ViewCount,
+		&l.VerificationModel, &verifiedAt, &lastConfirmed, &featuredUntil,
+		&l.ReportCount, &l.ViewCount,
 		&created, &updated,
 		&ownerName, &ownerEmail, &ownerRole, &ownerVerification, &ownerRating, &ownerRatingCount,
 	)
@@ -721,6 +835,7 @@ func scanListing(sc rowScanner) (*models.Listing, error) {
 	l.UpdatedAt, _ = time.Parse(time.RFC3339, updated)
 	l.VerifiedAt = parseOptionalTime(verifiedAt)
 	l.LastConfirmedAt = parseOptionalTime(lastConfirmed)
+	l.FeaturedUntil = parseOptionalTime(featuredUntil)
 
 	l.VerificationFlags = []string{}
 	if flagsJSON != "" {

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,9 +26,20 @@ import (
 type testEnv struct {
 	t        *testing.T
 	handler  http.Handler
+	db       *sql.DB
 	users    *store.UserStore
 	listings *store.ListingStore
 	viewings *store.ViewingStore
+}
+
+// backdate shifts a listing's creation time so ordering assertions are explicit
+// rather than relying on how two same-second rows happen to tie.
+func (e *testEnv) backdate(id string, d time.Duration) {
+	e.t.Helper()
+	when := time.Now().Add(-d).UTC().Format(time.RFC3339)
+	if _, err := e.db.Exec(`UPDATE listings SET created_at = ? WHERE id = ?`, when, id); err != nil {
+		e.t.Fatalf("backdate: %v", err)
+	}
 }
 
 func newTestEnv(t *testing.T) *testEnv {
@@ -70,7 +82,7 @@ func newTestEnv(t *testing.T) *testEnv {
 		Verifier: verifier,
 		Worker:   verify.NewWorker(verifier, listings, users),
 	})
-	return &testEnv{t: t, handler: srv.Handler(), users: users, listings: listings, viewings: viewings}
+	return &testEnv{t: t, handler: srv.Handler(), db: db, users: users, listings: listings, viewings: viewings}
 }
 
 // do issues a JSON request and returns the status and decoded body.
@@ -435,5 +447,375 @@ func TestUploadsDirectoryIsNotListable(t *testing.T) {
 		if rec.Code == http.StatusOK && strings.Contains(rec.Body.String(), "<a href=") {
 			t.Errorf("GET %s returned a directory index", path)
 		}
+	}
+}
+
+// --- featured listings ---
+
+// featureListing marks a listing verified and buys it a promotion slot.
+func (e *testEnv) featureListing(token, id, plan string) (int, map[string]any) {
+	e.t.Helper()
+	return e.do("POST", "/api/v1/listings/"+id+"/feature", token, map[string]any{"plan_id": plan})
+}
+
+func TestFeaturedListingSurfacesFirst(t *testing.T) {
+	e := newTestEnv(t)
+	token, _ := e.register("agent@example.com", "agent")
+
+	older := e.createListing(token, "Older Listing", nil)
+	newer := e.createListing(token, "Newer Listing", nil)
+	e.backdate(older, 2*time.Hour)
+	for _, id := range []string{older, newer} {
+		if err := e.listings.ApplyVerification(id, models.VerificationVerified, 90, "ok", nil, "test"); err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+	}
+
+	// Default order is newest-first, so the older listing is normally second.
+	if got := e.browseTitles("/api/v1/listings?page_size=50"); got[0] != "Newer Listing" {
+		t.Fatalf("baseline order = %v, want Newer Listing first", got)
+	}
+
+	if code, body := e.featureListing(token, older, "spotlight_7"); code != http.StatusOK {
+		t.Fatalf("feature: %d (%v)", code, body)
+	}
+	if got := e.browseTitles("/api/v1/listings?page_size=50"); got[0] != "Older Listing" {
+		t.Errorf("after promotion order = %v, want Older Listing first", got)
+	}
+
+	// Promotion must lead every sort, not just the default one.
+	if got := e.browseTitles("/api/v1/listings?sort=price_asc&page_size=50"); got[0] != "Older Listing" {
+		t.Errorf("price_asc order = %v, want the promoted listing first", got)
+	}
+}
+
+// The load-bearing rule: paying buys reach, never credibility. A listing that
+// has not passed screening cannot be promoted at any price — otherwise the
+// marketplace would sell amplification for scams.
+func TestUnverifiedListingCannotBePromoted(t *testing.T) {
+	e := newTestEnv(t)
+	token, _ := e.register("agent@example.com", "agent")
+
+	pending := e.createListing(token, "Still Screening", nil)
+	if code, body := e.featureListing(token, pending, "spotlight_7"); code != http.StatusConflict {
+		t.Errorf("promoting a pending listing = %d, want 409 (%v)", code, body)
+	}
+
+	rejected := e.createListing(token, "Rejected Listing", nil)
+	if err := e.listings.ApplyVerification(rejected, models.VerificationRejected, 5, "scam", nil, "test"); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if code, _ := e.featureListing(token, rejected, "spotlight_7"); code != http.StatusConflict {
+		t.Errorf("promoting a rejected listing = %d, want 409", code)
+	}
+}
+
+// A listing that loses verification after being promoted must lose its boost
+// too — paid time keeps running, but the placement stops.
+func TestPromotionLapsesWhenVerificationIsLost(t *testing.T) {
+	e := newTestEnv(t)
+	token, _ := e.register("agent@example.com", "agent")
+
+	promoted := e.createListing(token, "Promoted Listing", nil)
+	plain := e.createListing(token, "Plain Listing", nil)
+	e.backdate(promoted, 2*time.Hour) // without a boost it would sort second
+	for _, id := range []string{promoted, plain} {
+		if err := e.listings.ApplyVerification(id, models.VerificationVerified, 90, "ok", nil, "test"); err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+	}
+	if code, _ := e.featureListing(token, promoted, "spotlight_30"); code != http.StatusOK {
+		t.Fatal("could not promote")
+	}
+	if got := e.browseTitles("/api/v1/listings?page_size=50"); got[0] != "Promoted Listing" {
+		t.Fatalf("order = %v, want the promoted listing first", got)
+	}
+
+	// Re-screening knocks it back to flagged; the boost must stop immediately.
+	if err := e.listings.ApplyVerification(promoted, models.VerificationFlagged, 50, "concerns", nil, "test"); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if got := e.browseTitles("/api/v1/listings?page_size=50"); got[0] == "Promoted Listing" {
+		t.Errorf("order = %v, want the de-verified listing to lose its boost", got)
+	}
+}
+
+func TestExpiredPromotionDoesNotBoost(t *testing.T) {
+	e := newTestEnv(t)
+	token, _ := e.register("agent@example.com", "agent")
+
+	expired := e.createListing(token, "Expired Promo", nil)
+	newer := e.createListing(token, "Newer Listing", nil)
+	e.backdate(expired, 2*time.Hour)
+	for _, id := range []string{expired, newer} {
+		if err := e.listings.ApplyVerification(id, models.VerificationVerified, 90, "ok", nil, "test"); err != nil {
+			t.Fatalf("verify: %v", err)
+		}
+	}
+	if err := e.listings.SetFeatured(expired, time.Now().Add(-24*time.Hour)); err != nil {
+		t.Fatalf("set featured: %v", err)
+	}
+	if got := e.browseTitles("/api/v1/listings?page_size=50"); got[0] != "Newer Listing" {
+		t.Errorf("order = %v, want the expired promotion to carry no boost", got)
+	}
+}
+
+func TestFeatureRules(t *testing.T) {
+	e := newTestEnv(t)
+	ownerTok, _ := e.register("agent@example.com", "agent")
+	otherTok, _ := e.register("someone@example.com", "user")
+	id := e.createListing(ownerTok, "A Listing", nil)
+	if err := e.listings.ApplyVerification(id, models.VerificationVerified, 90, "ok", nil, "test"); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+
+	if code, _ := e.featureListing(otherTok, id, "spotlight_7"); code != http.StatusForbidden {
+		t.Errorf("promoting someone else's listing = %d, want 403", code)
+	}
+	if code, _ := e.featureListing(ownerTok, id, "not_a_plan"); code != http.StatusBadRequest {
+		t.Errorf("unknown plan = %d, want 400", code)
+	}
+
+	// Buying again while live extends rather than restarting the clock.
+	if code, _ := e.featureListing(ownerTok, id, "spotlight_7"); code != http.StatusOK {
+		t.Fatal("first purchase failed")
+	}
+	first, _ := e.listings.GetByID(id)
+	if code, _ := e.featureListing(ownerTok, id, "spotlight_7"); code != http.StatusOK {
+		t.Fatal("second purchase failed")
+	}
+	second, _ := e.listings.GetByID(id)
+	if !second.FeaturedUntil.After(*first.FeaturedUntil) {
+		t.Errorf("second purchase ended at %v, want later than %v", second.FeaturedUntil, first.FeaturedUntil)
+	}
+}
+
+func TestFeaturePlansAreListed(t *testing.T) {
+	e := newTestEnv(t)
+	code, body := e.do("GET", "/api/v1/feature-plans", "", nil)
+	if code != http.StatusOK {
+		t.Fatalf("feature-plans = %d", code)
+	}
+	plans, _ := body["plans"].([]any)
+	if len(plans) != len(models.FeaturePlans) {
+		t.Errorf("got %d plans, want %d", len(plans), len(models.FeaturePlans))
+	}
+	if body["currency"] != "PHP" {
+		t.Errorf("currency = %v, want PHP", body["currency"])
+	}
+}
+
+// browseTitles returns listing titles in the order the API returned them.
+func (e *testEnv) browseTitles(path string) []string {
+	e.t.Helper()
+	_, body := e.do("GET", path, "", nil)
+	raw, _ := json.Marshal(body["listings"])
+	var ls []models.Listing
+	_ = json.Unmarshal(raw, &ls)
+	out := make([]string, 0, len(ls))
+	for _, l := range ls {
+		out = append(out, l.Title)
+	}
+	return out
+}
+
+// --- photo management ---
+
+// uploadPhoto posts a tiny valid PNG and returns the created image id.
+func (e *testEnv) uploadPhoto(token, listingID string) string {
+	e.t.Helper()
+	// 1x1 PNG.
+	png := []byte{
+		0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a,
+		0, 0, 0, 0x0d, 'I', 'H', 'D', 'R', 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0,
+		0x90, 0x77, 0x53, 0xde,
+		0, 0, 0, 0x0c, 'I', 'D', 'A', 'T', 0x08, 0xd7, 0x63, 0xf8, 0xff, 0xff, 0x3f, 0, 5, 0xfe, 2, 0xfe,
+		0xa7, 0x35, 0x81, 0x84,
+		0, 0, 0, 0, 'I', 'E', 'N', 'D', 0xae, 0x42, 0x60, 0x82,
+	}
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, _ := mw.CreateFormFile("image", "photo.png")
+	part.Write(png)
+	mw.Close()
+
+	req := httptest.NewRequest("POST", "/api/v1/listings/"+listingID+"/images", &buf)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	e.handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusCreated {
+		e.t.Fatalf("upload photo: %d (%s)", rec.Code, rec.Body.String())
+	}
+	var img models.ListingImage
+	_ = json.Unmarshal(rec.Body.Bytes(), &img)
+	return img.ID
+}
+
+// photoIDs returns a listing's photo ids in display order.
+func (e *testEnv) photoIDs(id string) []string {
+	e.t.Helper()
+	l, err := e.listings.GetByID(id)
+	if err != nil {
+		e.t.Fatalf("load listing: %v", err)
+	}
+	out := make([]string, 0, len(l.Images))
+	for _, img := range l.Images {
+		out = append(out, img.ID)
+	}
+	return out
+}
+
+// A poster stuck with a bad first photo can't fix their thumbnail, and "poor
+// photos" was the survey's third-biggest complaint.
+func TestOwnerCanDeleteAndReorderPhotos(t *testing.T) {
+	e := newTestEnv(t)
+	token, _ := e.register("agent@example.com", "agent")
+	id := e.createListing(token, "Condo in Alabang", nil)
+
+	a := e.uploadPhoto(token, id)
+	b := e.uploadPhoto(token, id)
+	c := e.uploadPhoto(token, id)
+	if got := e.photoIDs(id); len(got) != 3 || got[0] != a {
+		t.Fatalf("initial photos = %v, want [a b c]", got)
+	}
+
+	// Promote the third photo to the thumbnail slot.
+	if code, body := e.do("PUT", "/api/v1/listings/"+id+"/images/order", token,
+		map[string]any{"image_ids": []string{c, a, b}}); code != http.StatusOK {
+		t.Fatalf("reorder: %d (%v)", code, body)
+	}
+	if got := e.photoIDs(id); got[0] != c {
+		t.Errorf("after reorder = %v, want %s first", got, c)
+	}
+
+	// Delete the middle one; ordering must stay contiguous.
+	if code, _ := e.do("DELETE", "/api/v1/listings/"+id+"/images/"+a, token, nil); code != http.StatusOK {
+		t.Fatalf("delete photo failed")
+	}
+	got := e.photoIDs(id)
+	if len(got) != 2 || got[0] != c || got[1] != b {
+		t.Errorf("after delete = %v, want [c b]", got)
+	}
+	l, _ := e.listings.GetByID(id)
+	for i, img := range l.Images {
+		if img.Position != i {
+			t.Errorf("photo %d has position %d; positions must stay contiguous", i, img.Position)
+		}
+	}
+}
+
+func TestPhotoManagementIsOwnerOnly(t *testing.T) {
+	e := newTestEnv(t)
+	ownerTok, _ := e.register("agent@example.com", "agent")
+	otherTok, _ := e.register("someone@example.com", "user")
+	id := e.createListing(ownerTok, "Condo in Alabang", nil)
+	photo := e.uploadPhoto(ownerTok, id)
+
+	if code, _ := e.do("DELETE", "/api/v1/listings/"+id+"/images/"+photo, otherTok, nil); code != http.StatusForbidden {
+		t.Errorf("stranger deleting a photo = %d, want 403", code)
+	}
+	if code, _ := e.do("PUT", "/api/v1/listings/"+id+"/images/order", otherTok,
+		map[string]any{"image_ids": []string{photo}}); code != http.StatusForbidden {
+		t.Errorf("stranger reordering = %d, want 403", code)
+	}
+
+	// Nor can an owner reshuffle photos belonging to a different listing.
+	other := e.createListing(ownerTok, "Another Listing", nil)
+	if code, _ := e.do("PUT", "/api/v1/listings/"+other+"/images/order", ownerTok,
+		map[string]any{"image_ids": []string{photo}}); code != http.StatusBadRequest {
+		t.Errorf("cross-listing reorder = %d, want 400", code)
+	}
+}
+
+// Removing a photo changes what the reviewer judged, so the badge must be
+// re-earned rather than inherited.
+func TestDeletingPhotoTriggersRescreening(t *testing.T) {
+	e := newTestEnv(t)
+	token, _ := e.register("agent@example.com", "agent")
+	id := e.createListing(token, "Condo in Alabang", nil)
+	photo := e.uploadPhoto(token, id)
+
+	if err := e.listings.ApplyVerification(id, models.VerificationVerified, 90, "ok", nil, "test"); err != nil {
+		t.Fatalf("verify: %v", err)
+	}
+	if code, _ := e.do("DELETE", "/api/v1/listings/"+id+"/images/"+photo, token, nil); code != http.StatusOK {
+		t.Fatal("delete failed")
+	}
+	l, _ := e.listings.GetByID(id)
+	if l.VerificationStatus != models.VerificationPending {
+		t.Errorf("status = %q after removing a photo, want pending", l.VerificationStatus)
+	}
+}
+
+// --- viewing auto-completion ---
+
+// An owner who behaves badly could block a review of themselves simply by never
+// marking the viewing complete. Time closes the loop instead.
+func TestPastViewingsAutoComplete(t *testing.T) {
+	e := newTestEnv(t)
+	agentTok, agentID := e.register("agent@example.com", "agent")
+	_, buyerID := e.register("buyer@example.com", "user")
+	listingID := e.createListing(agentTok, "Condo in Alabang", nil)
+
+	past := &models.ViewingRequest{
+		ID: "v-past", ListingID: listingID, RequesterID: buyerID, OwnerID: agentID,
+		ScheduledFor: time.Now().Add(-48 * time.Hour), Status: "confirmed",
+	}
+	recent := &models.ViewingRequest{
+		ID: "v-recent", ListingID: listingID, RequesterID: buyerID, OwnerID: agentID,
+		ScheduledFor: time.Now().Add(-2 * time.Hour), Status: "confirmed",
+	}
+	upcoming := &models.ViewingRequest{
+		ID: "v-future", ListingID: listingID, RequesterID: buyerID, OwnerID: agentID,
+		ScheduledFor: time.Now().Add(48 * time.Hour), Status: "confirmed",
+	}
+	for _, v := range []*models.ViewingRequest{past, recent, upcoming} {
+		if err := e.viewings.Create(v); err != nil {
+			t.Fatalf("create viewing: %v", err)
+		}
+	}
+
+	n, err := e.viewings.AutoCompleteDue(24 * time.Hour)
+	if err != nil {
+		t.Fatalf("auto-complete: %v", err)
+	}
+	if n != 1 {
+		t.Errorf("auto-completed %d viewings, want 1 (only the one past its grace period)", n)
+	}
+
+	want := map[string]string{"v-past": "completed", "v-recent": "confirmed", "v-future": "confirmed"}
+	for id, status := range want {
+		got, err := e.viewings.GetByID(id)
+		if err != nil {
+			t.Fatalf("load %s: %v", id, err)
+		}
+		if got.Status != status {
+			t.Errorf("%s = %q, want %q", id, got.Status, status)
+		}
+	}
+}
+
+// Auto-completion must not resurrect a viewing somebody cancelled or declined.
+func TestAutoCompleteIgnoresCancelledViewings(t *testing.T) {
+	e := newTestEnv(t)
+	agentTok, agentID := e.register("agent@example.com", "agent")
+	_, buyerID := e.register("buyer@example.com", "user")
+	listingID := e.createListing(agentTok, "Condo in Alabang", nil)
+
+	for _, status := range []string{"cancelled", "declined", "requested"} {
+		if err := e.viewings.Create(&models.ViewingRequest{
+			ID: "v-" + status, ListingID: listingID, RequesterID: buyerID, OwnerID: agentID,
+			ScheduledFor: time.Now().Add(-72 * time.Hour), Status: status,
+		}); err != nil {
+			t.Fatalf("create: %v", err)
+		}
+	}
+	n, err := e.viewings.AutoCompleteDue(24 * time.Hour)
+	if err != nil {
+		t.Fatalf("auto-complete: %v", err)
+	}
+	if n != 0 {
+		t.Errorf("auto-completed %d, want 0 — only confirmed viewings should close out", n)
 	}
 }

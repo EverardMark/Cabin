@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.cabin.app.data.ServiceLocator
 import com.cabin.app.data.model.Listing
+import com.cabin.app.data.model.FeaturePlan
 import com.cabin.app.data.model.PriceComparison
 import com.cabin.app.util.userMessage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,8 @@ data class DetailUiState(
     val openConversationId: String? = null,
     val actionMessage: String? = null,
     val busy: Boolean = false,
+    val featurePlans: List<FeaturePlan> = emptyList(),
+    val featureNote: String = "",
 )
 
 class ListingDetailViewModel : ViewModel() {
@@ -106,6 +109,44 @@ class ListingDetailViewModel : ViewModel() {
             repo.confirmListing(id).fold(
                 onSuccess = { l ->
                     _state.update { it.copy(busy = false, listing = l, actionMessage = "Marked as still available.") }
+                },
+                onFailure = { e -> _state.update { it.copy(busy = false, actionMessage = e.userMessage()) } },
+            )
+        }
+    }
+
+    /** Loads the promotion packages, for the "Feature this listing" dialog. */
+    fun loadFeaturePlans() {
+        if (_state.value.featurePlans.isNotEmpty()) return
+        viewModelScope.launch {
+            repo.featurePlans().onSuccess { res ->
+                _state.update { it.copy(featurePlans = res.plans, featureNote = res.note) }
+            }
+        }
+    }
+
+    /**
+     * Buys promoted placement. The server refuses this on a listing that has not
+     * passed screening — paying buys reach, never credibility.
+     */
+    fun featureListing(planId: String) {
+        val id = _state.value.listing?.id ?: return
+        _state.update { it.copy(busy = true) }
+        viewModelScope.launch {
+            repo.featureListing(id, planId).fold(
+                onSuccess = { res ->
+                    _state.update {
+                        it.copy(
+                            busy = false,
+                            listing = res.listing,
+                            // Be honest rather than implying money changed hands.
+                            actionMessage = if (res.paid) {
+                                "Your listing is now featured."
+                            } else {
+                                "Your listing is now featured. No payment was taken — checkout isn't connected yet."
+                            },
+                        )
+                    }
                 },
                 onFailure = { e -> _state.update { it.copy(busy = false, actionMessage = e.userMessage()) } },
             )

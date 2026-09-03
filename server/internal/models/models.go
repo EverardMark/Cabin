@@ -126,13 +126,27 @@ type Listing struct {
 	VerifiedAt          *time.Time `json:"verified_at,omitempty"`
 
 	LastConfirmedAt *time.Time `json:"last_confirmed_at,omitempty"`
-	ReportCount     int        `json:"report_count"`
-	ViewCount       int        `json:"view_count"`
+	// FeaturedUntil is when paid promotion expires. Promotion only takes effect
+	// while the listing is also verified — see IsFeatured.
+	FeaturedUntil *time.Time `json:"featured_until,omitempty"`
+	ReportCount   int        `json:"report_count"`
+	ViewCount     int        `json:"view_count"`
 
 	Images    []ListingImage `json:"images"`
 	Owner     *UserSummary   `json:"owner,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
+}
+
+// IsFeatured reports whether the listing should get promoted placement.
+//
+// Promotion is deliberately gated on verification: paying must buy reach, never
+// credibility. A listing that has not passed screening gets no boost no matter
+// what its owner paid, so the marketplace can never amplify a scam.
+func (l *Listing) IsFeatured() bool {
+	return l.FeaturedUntil != nil &&
+		l.FeaturedUntil.After(time.Now()) &&
+		l.VerificationStatus == VerificationVerified
 }
 
 // IsStale reports whether the owner has not confirmed availability recently.
@@ -236,6 +250,36 @@ type SavedSearch struct {
 	NewMatches    int       `json:"new_matches"`
 	LastAlertedAt time.Time `json:"last_alerted_at"`
 	CreatedAt     time.Time `json:"created_at"`
+}
+
+// FeaturePlan is a paid promotion package for a single listing.
+//
+// Priced per listing rather than per month: the surveyed supply side is mostly
+// private owners with one property, and their acceptable spend clustered at
+// PHP 500-1,000 (agents skewed higher, at PHP 1,000-3,000). These are starting
+// points to validate against real conversions, not researched prices.
+type FeaturePlan struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Days  int    `json:"days"`
+	Price int64  `json:"price"` // in whole pesos
+}
+
+// FeaturePlans are the promotion packages offered to posters.
+var FeaturePlans = []FeaturePlan{
+	{ID: "spotlight_7", Label: "Spotlight — 7 days", Days: 7, Price: 299},
+	{ID: "spotlight_14", Label: "Spotlight — 14 days", Days: 14, Price: 499},
+	{ID: "spotlight_30", Label: "Spotlight — 30 days", Days: 30, Price: 899},
+}
+
+// FeaturePlanByID looks up a plan, reporting whether it exists.
+func FeaturePlanByID(id string) (FeaturePlan, bool) {
+	for _, p := range FeaturePlans {
+		if p.ID == id {
+			return p, true
+		}
+	}
+	return FeaturePlan{}, false
 }
 
 // PriceComparison summarises comparable listings so a buyer can tell whether a
