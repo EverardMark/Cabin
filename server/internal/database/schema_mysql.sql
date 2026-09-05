@@ -169,3 +169,17 @@ CREATE TABLE IF NOT EXISTS saved_searches (
     CONSTRAINT fk_saved_searches_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     INDEX idx_saved_searches_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- One-time codes for phone verification. A verified badge is meaningless if the
+-- contact number behind it was never proven, so this closes that hole.
+CREATE TABLE IF NOT EXISTS phone_verifications (
+    user_id     VARCHAR(36)  NOT NULL PRIMARY KEY,
+    phone       VARCHAR(32)  NOT NULL,
+    code_hash   VARCHAR(255) NOT NULL,
+    attempts    INT          NOT NULL DEFAULT 0,
+    sends       INT          NOT NULL DEFAULT 0,
+    expires_at  VARCHAR(40)  NOT NULL,
+    last_sent_at VARCHAR(40) NOT NULL,
+    window_started_at VARCHAR(40) NOT NULL,
+    CONSTRAINT fk_phoneverif_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

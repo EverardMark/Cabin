@@ -202,6 +202,21 @@ data class SavedSearch(
     val createdAt: String = "",
 )
 
+@Serializable
+data class PhoneCodeResponse(
+    val sentTo: String = "",
+    val expiresIn: Int = 0,
+    /** Only present when no SMS gateway is configured, and never in production. */
+    val devCode: String? = null,
+    val note: String? = null,
+)
+
+@Serializable
+data class SendPhoneCodeRequest(val phone: String)
+
+@Serializable
+data class VerifyPhoneCodeRequest(val code: String)
+
 /**
  * A paid promotion package for a single listing. Featured listings were the
  * survey's one unanimous supply-side ask — every agent picked it (6/6), and 58%

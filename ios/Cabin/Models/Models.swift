@@ -226,6 +226,24 @@ struct SavedSearch: Codable, Identifiable, Hashable {
     var createdAt: String = ""
 }
 
+// MARK: - Phone verification
+
+struct PhoneCodeResponse: Decodable {
+    var sentTo: String = ""
+    var expiresIn: Int = 0
+    /// Only present when no SMS gateway is configured, and never in production.
+    var devCode: String?
+    var note: String?
+}
+
+struct SendPhoneCodeRequest: Encodable {
+    let phone: String
+}
+
+struct VerifyPhoneCodeRequest: Encodable {
+    let code: String
+}
+
 // MARK: - Featured listings
 
 /// A paid promotion package for a single listing.

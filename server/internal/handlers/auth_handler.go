@@ -315,6 +315,12 @@ func (s *Server) handleRequestVerification(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "add a contact number to your profile before requesting verification")
 		return
 	}
+	// The badge is supposed to mean somebody is reachable and accountable, so it
+	// requires a number that was actually proven rather than merely typed in.
+	if !user.PhoneVerified {
+		writeError(w, http.StatusConflict, "confirm your mobile number first — we'll text you a code")
+		return
+	}
 
 	verdict, err := s.verifier.ReviewUser(r.Context(), user)
 	if err != nil {

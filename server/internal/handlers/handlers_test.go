@@ -18,6 +18,7 @@ import (
 	"cabin/internal/config"
 	"cabin/internal/database"
 	"cabin/internal/models"
+	"cabin/internal/sms"
 	"cabin/internal/storage"
 	"cabin/internal/store"
 	"cabin/internal/verify"
@@ -77,6 +78,10 @@ func newTestEnv(t *testing.T) *testEnv {
 		Viewings: viewings,
 		Reviews:  store.NewReviewStore(db),
 		Searches: store.NewSearchStore(db),
+		Phones:   store.NewPhoneStore(db),
+		// The simulated sender echoes the code back, which is how these tests
+		// complete the flow without an SMS account.
+		SMS:      sms.LogSender{},
 		Tokens:   auth.NewTokenService("test-secret"),
 		Uploads:  uploads,
 		Verifier: verifier,
@@ -817,5 +822,164 @@ func TestAutoCompleteIgnoresCancelledViewings(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("auto-completed %d, want 0 — only confirmed viewings should close out", n)
+	}
+}
+
+// --- phone verification ---
+
+// sendPhoneCode requests a code and returns it. Only works because the test
+// environment uses the simulated sender, which echoes the code back.
+func (e *testEnv) sendPhoneCode(token, phone string) (int, map[string]any) {
+	e.t.Helper()
+	body := map[string]any{}
+	if phone != "" {
+		body["phone"] = phone
+	}
+	return e.do("POST", "/api/v1/me/phone/send-code", token, body)
+}
+
+func TestPhoneVerificationHappyPath(t *testing.T) {
+	e := newTestEnv(t)
+	token, id := e.register("owner@example.com", "user")
+
+	code, body := e.sendPhoneCode(token, "+63 917 555 0134")
+	if code != http.StatusOK {
+		t.Fatalf("send code: %d (%v)", code, body)
+	}
+	devCode, _ := body["dev_code"].(string)
+	if len(devCode) != 6 {
+		t.Fatalf("dev_code = %q, want 6 digits", devCode)
+	}
+	// The response must not leak the whole number back.
+	if sent, _ := body["sent_to"].(string); !strings.Contains(sent, "•") {
+		t.Errorf("sent_to = %q, want it masked", sent)
+	}
+
+	if code, body := e.do("POST", "/api/v1/me/phone/verify", token,
+		map[string]any{"code": devCode}); code != http.StatusOK {
+		t.Fatalf("verify: %d (%v)", code, body)
+	}
+	user, _ := e.users.GetByID(id)
+	if !user.PhoneVerified {
+		t.Error("phone_verified is still false after a correct code")
+	}
+	if user.Phone != "+63 917 555 0134" {
+		t.Errorf("phone = %q, want the number the code was sent to", user.Phone)
+	}
+}
+
+func TestPhoneVerificationRejectsWrongCode(t *testing.T) {
+	e := newTestEnv(t)
+	token, id := e.register("owner@example.com", "user")
+	_, body := e.sendPhoneCode(token, "+63 917 555 0134")
+	real, _ := body["dev_code"].(string)
+
+	wrong := "000000"
+	if wrong == real {
+		wrong = "111111"
+	}
+	if code, _ := e.do("POST", "/api/v1/me/phone/verify", token,
+		map[string]any{"code": wrong}); code != http.StatusBadRequest {
+		t.Errorf("wrong code = %d, want 400", code)
+	}
+	user, _ := e.users.GetByID(id)
+	if user.PhoneVerified {
+		t.Error("a wrong code verified the number")
+	}
+}
+
+// A 6-digit code is low entropy, so the attempt cap is what protects it.
+func TestPhoneVerificationLocksOutAfterTooManyTries(t *testing.T) {
+	e := newTestEnv(t)
+	token, _ := e.register("owner@example.com", "user")
+	_, body := e.sendPhoneCode(token, "+63 917 555 0134")
+	real, _ := body["dev_code"].(string)
+
+	for i := 0; i < 5; i++ {
+		wrong := fmt.Sprintf("%06d", 900000+i)
+		if wrong == real {
+			wrong = "111111"
+		}
+		e.do("POST", "/api/v1/me/phone/verify", token, map[string]any{"code": wrong})
+	}
+	// Even the correct code must now be refused; the challenge is burnt.
+	if code, _ := e.do("POST", "/api/v1/me/phone/verify", token,
+		map[string]any{"code": real}); code == http.StatusOK {
+		t.Error("the correct code still worked after 5 wrong attempts")
+	}
+}
+
+func TestPhoneCodeResendIsRateLimited(t *testing.T) {
+	e := newTestEnv(t)
+	token, _ := e.register("owner@example.com", "user")
+
+	if code, _ := e.sendPhoneCode(token, "+63 917 555 0134"); code != http.StatusOK {
+		t.Fatal("first send failed")
+	}
+	if code, _ := e.sendPhoneCode(token, "+63 917 555 0134"); code != http.StatusTooManyRequests {
+		t.Errorf("immediate resend = %d, want 429", code)
+	}
+}
+
+func TestPhoneVerificationRejectsImplausibleNumbers(t *testing.T) {
+	e := newTestEnv(t)
+	token, _ := e.register("owner@example.com", "user")
+	for _, bad := range []string{"12345", "not a phone", ""} {
+		if code, _ := e.sendPhoneCode(token, bad); code != http.StatusBadRequest {
+			t.Errorf("send to %q = %d, want 400", bad, code)
+		}
+	}
+}
+
+// The badge is supposed to mean somebody is reachable. Before this, an account
+// could be verified with a number nobody ever proved.
+func TestAccountVerificationRequiresAConfirmedPhone(t *testing.T) {
+	e := newTestEnv(t)
+	token, id := e.register("owner@example.com", "user")
+
+	// A number typed into the profile is not enough on its own.
+	if code, _ := e.do("PATCH", "/api/v1/me", token,
+		map[string]any{"phone": "+63 917 555 0134"}); code != http.StatusOK {
+		t.Fatal("profile update failed")
+	}
+	if code, body := e.do("POST", "/api/v1/me/verification", token, nil); code != http.StatusConflict {
+		t.Fatalf("verification with an unconfirmed number = %d, want 409 (%v)", code, body)
+	}
+
+	// Once proven, verification can proceed.
+	_, sent := e.sendPhoneCode(token, "")
+	devCode, _ := sent["dev_code"].(string)
+	if code, _ := e.do("POST", "/api/v1/me/phone/verify", token,
+		map[string]any{"code": devCode}); code != http.StatusOK {
+		t.Fatal("could not confirm the number")
+	}
+	if code, body := e.do("POST", "/api/v1/me/verification", token, nil); code != http.StatusOK {
+		t.Fatalf("verification after confirming = %d, want 200 (%v)", code, body)
+	}
+	user, _ := e.users.GetByID(id)
+	if user.VerificationStatus == models.VerificationUnverified {
+		t.Error("account is still unverified after passing review")
+	}
+}
+
+// Changing the number must invalidate the proof, or a user could verify one
+// number and then swap in another.
+func TestChangingPhoneDropsVerifiedFlag(t *testing.T) {
+	e := newTestEnv(t)
+	token, id := e.register("owner@example.com", "user")
+	_, sent := e.sendPhoneCode(token, "+63 917 555 0134")
+	devCode, _ := sent["dev_code"].(string)
+	e.do("POST", "/api/v1/me/phone/verify", token, map[string]any{"code": devCode})
+
+	if user, _ := e.users.GetByID(id); !user.PhoneVerified {
+		t.Fatal("setup: number should be verified")
+	}
+	if code, _ := e.do("PATCH", "/api/v1/me", token,
+		map[string]any{"phone": "+63 918 555 9999"}); code != http.StatusOK {
+		t.Fatal("profile update failed")
+	}
+	user, _ := e.users.GetByID(id)
+	if user.PhoneVerified {
+		t.Error("phone_verified survived a change of number")
 	}
 }

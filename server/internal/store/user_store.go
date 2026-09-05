@@ -90,10 +90,14 @@ func (s *UserStore) SetGoogleID(id, googleID string) error {
 }
 
 // UpdateProfile writes the user-editable profile fields.
+//
+// phone_verified is written too: swapping in a new number must drop the proof,
+// otherwise a user could verify one number and then quietly replace it.
 func (s *UserStore) UpdateProfile(u *models.User) error {
 	res, err := s.db.Exec(
-		`UPDATE users SET name = ?, phone = ?, bio = ?, license_no = ?, role = ? WHERE id = ?`,
-		u.Name, u.Phone, u.Bio, u.LicenseNo, u.Role, u.ID)
+		`UPDATE users SET name = ?, phone = ?, bio = ?, license_no = ?, role = ?, phone_verified = ?
+		 WHERE id = ?`,
+		u.Name, u.Phone, u.Bio, u.LicenseNo, u.Role, boolToInt(u.PhoneVerified), u.ID)
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,10 @@ import com.cabin.app.data.model.LoginRequest
 import com.cabin.app.data.model.Message
 import com.cabin.app.data.model.MessageRequest
 import com.cabin.app.data.model.MessagesResponse
+import com.cabin.app.data.model.PhoneCodeResponse
 import com.cabin.app.data.model.PriceComparison
+import com.cabin.app.data.model.SendPhoneCodeRequest
+import com.cabin.app.data.model.VerifyPhoneCodeRequest
 import com.cabin.app.data.model.ProfileRequest
 import com.cabin.app.data.model.PublicProfile
 import com.cabin.app.data.model.RegisterRequest
@@ -120,6 +123,17 @@ class CabinRepository(
         session.save(session.currentToken ?: "", res.user)
         _user.value = res.user
         res
+    }
+
+    suspend fun sendPhoneCode(phone: String): Result<PhoneCodeResponse> = runCatching {
+        api.sendPhoneCode(SendPhoneCodeRequest(phone.trim()))
+    }
+
+    suspend fun verifyPhoneCode(code: String): Result<User> = runCatching {
+        val user = api.verifyPhoneCode(VerifyPhoneCodeRequest(code.trim())).user
+        session.save(session.currentToken ?: "", user)
+        _user.value = user
+        user
     }
 
     suspend fun profile(userId: String): Result<PublicProfile> = runCatching { api.profile(userId).user }

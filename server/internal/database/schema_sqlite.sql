@@ -161,3 +161,16 @@ CREATE TABLE IF NOT EXISTS saved_searches (
 );
 
 CREATE INDEX IF NOT EXISTS idx_saved_searches_user ON saved_searches(user_id);
+
+-- One-time codes for phone verification. A verified badge is meaningless if the
+-- contact number behind it was never proven, so this closes that hole.
+CREATE TABLE IF NOT EXISTS phone_verifications (
+    user_id     TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    phone       TEXT NOT NULL,
+    code_hash   TEXT NOT NULL,
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    sends       INTEGER NOT NULL DEFAULT 0,
+    expires_at  TEXT NOT NULL,
+    last_sent_at TEXT NOT NULL,
+    window_started_at TEXT NOT NULL
+);

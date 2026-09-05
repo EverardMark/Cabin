@@ -45,6 +45,9 @@ auto-loaded — export them or use your process manager.
 | `ANTHROPIC_API_KEY` | – | Enables Claude-backed screening; empty falls back to the built-in rule check |
 | `VERIFY_MODEL` | `claude-opus-5` | Model used for listing and account review |
 | `MAX_UPLOAD_MB` | `10` | Hard cap on a single image upload |
+| `SMS_URL` | – | SMS gateway endpoint (Semaphore-style form POST). Empty logs the code instead of sending |
+| `SMS_API_KEY` | – | Gateway API key |
+| `SMS_SENDER` | `Cabin` | Sender name shown on the message |
 | `PAYMENT_PROVIDER` | – | Payment gateway for featured listings. Empty blocks paid promotion in production so it can't be given away |
 | `GOOGLE_CLIENT_ID` | – | Comma-separated accepted Google client IDs (Web, iOS, Android) |
 
@@ -77,7 +80,9 @@ Base path `/api/v1`. Send `Authorization: Bearer <token>` for authenticated rout
 | `POST` | `/auth/google` | | `{id_token}` → `{token, user}`; 501 until `GOOGLE_CLIENT_ID` is set |
 | `GET` | `/auth/me` | ✓ | Current user |
 | `PATCH` | `/me` | ✓ | Update name, phone, bio, licence, role |
-| `POST` | `/me/verification` | ✓ | Submit the account for identity review |
+| `POST` | `/me/phone/send-code` | ✓ | `{phone?}` — texts a 6-digit code; rate limited |
+| `POST` | `/me/phone/verify` | ✓ | `{code}` → sets `phone_verified` |
+| `POST` | `/me/verification` | ✓ | Submit the account for identity review (409 without a confirmed number) |
 | `GET` | `/me/summary` | ✓ | Unread messages, viewings, listings needing attention |
 | `GET` | `/me/listings` | ✓ | Caller's listings, including rejected ones |
 | `GET` | `/users/{id}` | | Public profile |
@@ -196,6 +201,25 @@ listings read better in plain date order.
 Without `PAYMENT_PROVIDER` set, the endpoint grants promotion for free and returns
 `"paid": false` so clients can say no money changed hands; in `ENV=production` it returns
 501 instead.
+
+## Phone verification
+
+Account verification requires a mobile number confirmed by SMS. Before this,
+`phone_verified` was never set by anything, so a verified account could carry a number
+nobody had proven — which hollows out the badge the whole app rests on.
+
+A 6-digit code is low entropy, so the protection is in the limits: codes are **bcrypt
+hashed at rest**, expire after **10 minutes**, allow **5 attempts** before the challenge
+is burnt, and are capped at **1 per minute / 5 per rolling day**. Changing your number in
+the profile drops `phone_verified`, so a proven number can't be swapped for another.
+
+`internal/sms` abstracts delivery. With no `SMS_URL` it uses `LogSender`, which writes the
+code to the server log and lets the API echo it as `dev_code` so the flow is testable with
+no SMS account. That echo is gated on **both** the sender being simulated and `ENV` not
+being production, and production refuses the endpoint outright rather than pretending to
+send. `HTTPSender` posts the Semaphore form fields (`apikey`, `number`, `message`,
+`sendername`); its request shape is covered by tests against a stub server, not against a
+live gateway.
 
 ## Viewing auto-completion
 

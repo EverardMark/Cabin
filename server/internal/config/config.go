@@ -38,6 +38,11 @@ type Config struct {
 	// (e.g. "paymongo"). Empty means none is wired up yet, which blocks paid
 	// promotion in production so it can never be given away by accident.
 	PaymentProvider string
+	// SMS gateway for phone-verification codes. An empty SMSURL falls back to
+	// logging the code, which is refused in production.
+	SMSURL    string
+	SMSAPIKey string
+	SMSSender string
 }
 
 // Load reads configuration from the environment, applying development-friendly
@@ -58,6 +63,9 @@ func Load() *Config {
 		VerifyModel:     getEnv("VERIFY_MODEL", "claude-opus-5"),
 		MaxUploadBytes:  int64(getEnvInt("MAX_UPLOAD_MB", 10)) << 20,
 		PaymentProvider: getEnv("PAYMENT_PROVIDER", ""),
+		SMSURL:          getEnv("SMS_URL", ""),
+		SMSAPIKey:       getEnv("SMS_API_KEY", ""),
+		SMSSender:       getEnv("SMS_SENDER", "Cabin"),
 	}
 
 	isProd := cfg.Env == "production"

@@ -43,6 +43,9 @@ import com.cabin.app.ui.common.RatingStars
 import com.cabin.app.ui.common.VerificationBadge
 import com.cabin.app.ui.common.verificationColor
 import com.cabin.app.ui.listings.ListingCard
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.material3.OutlinedTextField
 
 @Composable
 fun ProfileScreen(
@@ -53,6 +56,7 @@ fun ProfileScreen(
 ) {
     val user by viewModel.user.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
+    var showPhoneDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
@@ -93,7 +97,12 @@ fun ProfileScreen(
                 status = user?.verificationStatus ?: Verification.UNVERIFIED,
                 notes = user?.verificationNotes.orEmpty(),
                 verifying = state.verifying,
+                phoneVerified = user?.phoneVerified == true,
                 onRequest = viewModel::requestVerification,
+                onConfirmPhone = {
+                    viewModel.resetPhoneFlow()
+                    showPhoneDialog = true
+                },
             )
             Spacer(Modifier.height(10.dp))
 
@@ -151,6 +160,16 @@ fun ProfileScreen(
             }
         }
     }
+
+    if (showPhoneDialog) {
+        PhoneVerificationDialog(
+            initialPhone = user?.phone.orEmpty(),
+            state = state,
+            onSend = viewModel::sendPhoneCode,
+            onVerify = { code -> viewModel.verifyPhoneCode(code) { showPhoneDialog = false } },
+            onDismiss = { showPhoneDialog = false },
+        )
+    }
 }
 
 /** The account's own verification state, and the way to earn the badge. */
@@ -159,7 +178,9 @@ private fun VerificationCard(
     status: String,
     notes: String,
     verifying: Boolean,
+    phoneVerified: Boolean,
     onRequest: () -> Unit,
+    onConfirmPhone: () -> Unit,
 ) {
     val tint = verificationColor(status)
     Column(
@@ -186,10 +207,104 @@ private fun VerificationCard(
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (status != Verification.VERIFIED) {
-            Button(onClick = onRequest, enabled = !verifying, modifier = Modifier.fillMaxWidth()) {
-                Text(if (verifying) "Checking…" else "Request verification")
+        // A confirmed number is the prerequisite: the badge is meant to mean
+        // somebody is reachable, not that they typed a number in.
+        if (!phoneVerified) {
+            Text(
+                "Mobile number not confirmed",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.tertiary,
+            )
+            Button(onClick = onConfirmPhone, modifier = Modifier.fillMaxWidth()) {
+                Text("Confirm my number")
+            }
+        } else {
+            Text(
+                "Mobile number confirmed",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            if (status != Verification.VERIFIED) {
+                Button(onClick = onRequest, enabled = !verifying, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (verifying) "Checking…" else "Request verification")
+                }
             }
         }
     }
+}
+
+
+/**
+ * Confirms a mobile number by SMS. Without it the verified badge was hollow —
+ * `phone_verified` was never set by anything.
+ */
+@Composable
+private fun PhoneVerificationDialog(
+    initialPhone: String,
+    state: ProfileUiState,
+    onSend: (String) -> Unit,
+    onVerify: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var phone by remember { mutableStateOf(initialPhone) }
+    var code by remember { mutableStateOf("") }
+    val awaitingCode = state.phoneCodeSentTo != null
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Confirm your number") },
+        text = {
+            Column {
+                if (!awaitingCode) {
+                    OutlinedTextField(
+                        value = phone,
+                        onValueChange = { phone = it },
+                        label = { Text("Mobile number") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "We'll text you a 6-digit code. Confirming your number is what earns the verified badge — people can tell a real poster from a throwaway.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    OutlinedTextField(
+                        value = code,
+                        onValueChange = { code = it },
+                        label = { Text("6-digit code") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Sent to ${state.phoneCodeSentTo}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    state.phoneDevCode?.let {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Development code: $it (no SMS gateway configured)",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                }
+                state.phoneError?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (awaitingCode) onVerify(code) else onSend(phone) },
+                enabled = !state.phoneBusy &&
+                    (if (awaitingCode) code.length == 6 else phone.count { it.isDigit() } >= 10),
+            ) { Text(if (awaitingCode) "Confirm" else "Send code") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

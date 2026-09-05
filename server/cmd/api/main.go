@@ -19,6 +19,7 @@ import (
 	"cabin/internal/database"
 	"cabin/internal/handlers"
 	"cabin/internal/seed"
+	"cabin/internal/sms"
 	"cabin/internal/storage"
 	"cabin/internal/store"
 	"cabin/internal/verify"
@@ -80,11 +81,17 @@ func main() {
 	viewings := store.NewViewingStore(db)
 	reviews := store.NewReviewStore(db)
 	searches := store.NewSearchStore(db)
+	phones := store.NewPhoneStore(db)
 	tokens := auth.NewTokenService(cfg.JWTSecret)
 
 	uploads, err := storage.NewLocal(cfg.UploadDir)
 	if err != nil {
 		log.Fatalf("init upload storage: %v", err)
+	}
+
+	texter := sms.New(cfg.SMSURL, cfg.SMSAPIKey, cfg.SMSSender)
+	if texter.Simulated() {
+		log.Println("SMS_URL not set; phone verification codes are written to the log instead of sent")
 	}
 
 	verifier := verify.New(cfg.AnthropicAPIKey, cfg.VerifyModel)
@@ -107,6 +114,8 @@ func main() {
 		Viewings: viewings,
 		Reviews:  reviews,
 		Searches: searches,
+		Phones:   phones,
+		SMS:      texter,
 		Tokens:   tokens,
 		Uploads:  uploads,
 		Verifier: verifier,

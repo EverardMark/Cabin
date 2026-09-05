@@ -323,7 +323,7 @@ The badge tells other users that this account looks like a real, accountable per
 
 Weigh:
 - A real personal or business name, rather than a placeholder, a single letter, keyboard mash, or a name that is really an advert ("BEST DEALS RENT NOW")
-- A contact number that is present and plausibly formatted for the Philippines
+- A contact number that has been confirmed by SMS. An unconfirmed number is not accountability — anyone can type one in
 - A confirmed email address
 - A bio that says something specific and accountable. An empty bio is a mild negative, not a disqualifier
 - For accounts claiming to be a real estate agent or broker: a licence number that is present and plausibly formatted. An agent claiming professional standing with no licence number at all should not be verified
@@ -387,7 +387,7 @@ func userPrompt(u *models.User) string {
 	fmt.Fprintf(&b, "name: %s\n", u.Name)
 	fmt.Fprintf(&b, "claims_to_be: %s\n", u.Role)
 	fmt.Fprintf(&b, "email_confirmed: %t\n", u.EmailVerified)
-	fmt.Fprintf(&b, "phone_on_file: %t\n", strings.TrimSpace(u.Phone) != "")
+	fmt.Fprintf(&b, "phone_confirmed_by_sms: %t\n", u.PhoneVerified)
 	fmt.Fprintf(&b, "phone: %s\n", u.Phone)
 	fmt.Fprintf(&b, "license_number: %s\n", u.LicenseNo)
 	fmt.Fprintf(&b, "account_age_days: %d\n", int(time.Since(u.CreatedAt).Hours()/24))
@@ -408,6 +408,10 @@ func heuristicUserReview(u *models.User) *Verdict {
 	}
 	if strings.TrimSpace(u.Phone) == "" {
 		flags = append(flags, "no_phone")
+		score -= 25
+	} else if !u.PhoneVerified {
+		// A number nobody proved is not accountability.
+		flags = append(flags, "phone_unconfirmed")
 		score -= 25
 	}
 	if !u.EmailVerified {

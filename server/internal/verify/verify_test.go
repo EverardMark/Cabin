@@ -125,7 +125,7 @@ func TestSanitizeKeepsScoreAndStatusConsistent(t *testing.T) {
 func TestHeuristicUserReviewRequiresLicenseFromAgents(t *testing.T) {
 	agent := &models.User{
 		Name: "Maria Santos", Role: models.RoleAgent, Phone: "+63 917 555 0134",
-		Bio: "Licensed broker.", EmailVerified: true, CreatedAt: time.Now(),
+		Bio: "Licensed broker.", EmailVerified: true, PhoneVerified: true, CreatedAt: time.Now(),
 	}
 	if v := heuristicUserReview(agent); v.Status == models.VerificationVerified {
 		t.Errorf("agent without a licence number was verified (score %d, flags %v)", v.Score, v.Flags)
@@ -205,5 +205,46 @@ func TestUserPromptKeepsAccountAge(t *testing.T) {
 	u := &models.User{Name: "Ramon Dela Cruz", Role: "user", CreatedAt: time.Now()}
 	if !contains(userPrompt(u), "account_age_days") {
 		t.Error("account prompt should still include account age")
+	}
+}
+
+// A number anyone can type in is not accountability, so an unconfirmed one must
+// not earn the badge. Before phone verification existed, it silently did.
+func TestHeuristicUserReviewRequiresConfirmedPhone(t *testing.T) {
+	u := &models.User{
+		Name: "Ramon Dela Cruz", Role: "user", Phone: "+63 918 555 0192",
+		Bio: "Renting out the family townhouse.", EmailVerified: true,
+		PhoneVerified: false, CreatedAt: time.Now(),
+	}
+	v := heuristicUserReview(u)
+	if v.Status == models.VerificationVerified {
+		t.Errorf("account with an unconfirmed number was verified (score %d)", v.Score)
+	}
+	found := false
+	for _, f := range v.Flags {
+		if f == "phone_unconfirmed" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("flags = %v, want phone_unconfirmed", v.Flags)
+	}
+
+	u.PhoneVerified = true
+	if v := heuristicUserReview(u); v.Status != models.VerificationVerified {
+		t.Errorf("status = %q once the number is confirmed, want verified (flags %v)", v.Status, v.Flags)
+	}
+}
+
+// The reviewer must be told whether the number was proven, not just that one
+// exists — otherwise it can't weigh it.
+func TestUserPromptReportsPhoneConfirmation(t *testing.T) {
+	u := &models.User{Name: "Ramon Dela Cruz", Phone: "+63 918 555 0192", CreatedAt: time.Now()}
+	if !contains(userPrompt(u), "phone_confirmed_by_sms: false") {
+		t.Error("account prompt should report that the number is unconfirmed")
+	}
+	u.PhoneVerified = true
+	if !contains(userPrompt(u), "phone_confirmed_by_sms: true") {
+		t.Error("account prompt should report a confirmed number")
 	}
 }

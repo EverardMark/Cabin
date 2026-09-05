@@ -78,6 +78,17 @@ final class APIClient {
         try await send("api/v1/me/verification", method: "POST", authorized: true)
     }
 
+    /// Texts a one-time code to confirm the user's mobile number.
+    func sendPhoneCode(phone: String) async throws -> PhoneCodeResponse {
+        try await send("api/v1/me/phone/send-code", method: "POST",
+                       body: SendPhoneCodeRequest(phone: phone), authorized: true)
+    }
+
+    func verifyPhoneCode(_ code: String) async throws -> MeResponse {
+        try await send("api/v1/me/phone/verify", method: "POST",
+                       body: VerifyPhoneCodeRequest(code: code), authorized: true)
+    }
+
     func profile(userId: String) async throws -> ProfileResponse {
         try await send("api/v1/users/\(userId)")
     }

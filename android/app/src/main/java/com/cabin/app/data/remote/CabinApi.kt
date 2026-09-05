@@ -17,7 +17,10 @@ import com.cabin.app.data.model.MeResponse
 import com.cabin.app.data.model.Message
 import com.cabin.app.data.model.MessageRequest
 import com.cabin.app.data.model.MessagesResponse
+import com.cabin.app.data.model.PhoneCodeResponse
 import com.cabin.app.data.model.PriceComparison
+import com.cabin.app.data.model.SendPhoneCodeRequest
+import com.cabin.app.data.model.VerifyPhoneCodeRequest
 import com.cabin.app.data.model.ProfileRequest
 import com.cabin.app.data.model.ProfileResponse
 import com.cabin.app.data.model.RegisterRequest
@@ -73,6 +76,13 @@ interface CabinApi {
     /** Submits the signed-in account for automated identity review. */
     @POST("api/v1/me/verification")
     suspend fun requestVerification(): VerificationResponse
+
+    /** Texts a one-time code to confirm the user's mobile number. */
+    @POST("api/v1/me/phone/send-code")
+    suspend fun sendPhoneCode(@Body body: SendPhoneCodeRequest): PhoneCodeResponse
+
+    @POST("api/v1/me/phone/verify")
+    suspend fun verifyPhoneCode(@Body body: VerifyPhoneCodeRequest): MeResponse
 
     @GET("api/v1/users/{id}")
     suspend fun profile(@Path("id") id: String): ProfileResponse

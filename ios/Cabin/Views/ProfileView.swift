@@ -9,6 +9,7 @@ struct ProfileView: View {
     @State private var showEditProfile = false
     @State private var verifying = false
     @State private var verificationMessage: String?
+    @State private var showPhoneSheet = false
 
     private var user: User? { appState.currentUser }
 
@@ -65,6 +66,7 @@ struct ProfileView: View {
             ListingDetailView(listingId: id)
         }
         .sheet(isPresented: $showEditProfile) { EditProfileSheet() }
+        .sheet(isPresented: $showPhoneSheet) { PhoneVerificationSheet() }
         .alert("Verification", isPresented: .constant(verificationMessage != nil)) {
             Button("OK") { verificationMessage = nil }
         } message: {
@@ -120,7 +122,19 @@ struct ProfileView: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
 
-            if status != .verified {
+            // A confirmed number is the prerequisite: the badge is meant to mean
+            // somebody is reachable, not that they typed a number in.
+            if user?.phoneVerified != true {
+                Label("Mobile number not confirmed", systemImage: "exclamationmark.circle")
+                    .font(.caption).foregroundStyle(Color.cabinClay)
+                Button {
+                    showPhoneSheet = true
+                } label: {
+                    Text("Confirm my number").frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.regular)
+            } else if status != .verified {
                 Button {
                     Task { await requestVerification() }
                 } label: {
@@ -133,6 +147,11 @@ struct ProfileView: View {
                 .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
                 .disabled(verifying)
+            }
+
+            if user?.phoneVerified == true {
+                Label("Mobile number confirmed", systemImage: "checkmark.circle.fill")
+                    .font(.caption).foregroundStyle(Color.cabinForest)
             }
         }
         .padding(14)

@@ -20,6 +20,12 @@ data class ProfileUiState(
     val verifying: Boolean = false,
     val verificationMessage: String? = null,
     val savingProfile: Boolean = false,
+    // Phone confirmation. A verified badge is hollow if the number behind it
+    // was never proven, so this gates account verification.
+    val phoneCodeSentTo: String? = null,
+    val phoneDevCode: String? = null,
+    val phoneBusy: Boolean = false,
+    val phoneError: String? = null,
 )
 
 class ProfileViewModel : ViewModel() {
@@ -92,6 +98,38 @@ class ProfileViewModel : ViewModel() {
             )
         }
     }
+
+    fun sendPhoneCode(phone: String) {
+        if (_state.value.phoneBusy) return
+        _state.update { it.copy(phoneBusy = true, phoneError = null) }
+        viewModelScope.launch {
+            repo.sendPhoneCode(phone).fold(
+                onSuccess = { res ->
+                    _state.update {
+                        it.copy(phoneBusy = false, phoneCodeSentTo = res.sentTo, phoneDevCode = res.devCode)
+                    }
+                },
+                onFailure = { e -> _state.update { it.copy(phoneBusy = false, phoneError = e.userMessage()) } },
+            )
+        }
+    }
+
+    fun verifyPhoneCode(code: String, onDone: () -> Unit) {
+        if (_state.value.phoneBusy) return
+        _state.update { it.copy(phoneBusy = true, phoneError = null) }
+        viewModelScope.launch {
+            repo.verifyPhoneCode(code).fold(
+                onSuccess = {
+                    _state.update { it.copy(phoneBusy = false, phoneCodeSentTo = null, phoneDevCode = null) }
+                    onDone()
+                },
+                onFailure = { e -> _state.update { it.copy(phoneBusy = false, phoneError = e.userMessage()) } },
+            )
+        }
+    }
+
+    fun resetPhoneFlow() =
+        _state.update { it.copy(phoneCodeSentTo = null, phoneDevCode = null, phoneError = null) }
 
     fun logout() {
         viewModelScope.launch { repo.logout() }

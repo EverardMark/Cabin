@@ -9,6 +9,7 @@ import (
 	"cabin/internal/config"
 	"cabin/internal/middleware"
 	"cabin/internal/models"
+	"cabin/internal/sms"
 	"cabin/internal/storage"
 	"cabin/internal/store"
 	"cabin/internal/verify"
@@ -25,6 +26,8 @@ type Server struct {
 	searches *store.SearchStore
 	tokens   *auth.TokenService
 	uploads  *storage.LocalStorage
+	phones   *store.PhoneStore
+	sms      sms.Sender
 	verifier *verify.Service
 	worker   *verify.Worker
 }
@@ -41,6 +44,8 @@ type Deps struct {
 	Searches *store.SearchStore
 	Tokens   *auth.TokenService
 	Uploads  *storage.LocalStorage
+	Phones   *store.PhoneStore
+	SMS      sms.Sender
 	Verifier *verify.Service
 	Worker   *verify.Worker
 }
@@ -56,6 +61,8 @@ func NewServer(d Deps) *Server {
 		searches: d.Searches,
 		tokens:   d.Tokens,
 		uploads:  d.Uploads,
+		phones:   d.Phones,
+		sms:      d.SMS,
 		verifier: d.Verifier,
 		worker:   d.Worker,
 	}
@@ -76,6 +83,8 @@ func (s *Server) Handler() http.Handler {
 	// Profile & identity verification
 	mux.Handle("PATCH /api/v1/me", s.requireAuth(http.HandlerFunc(s.handleUpdateProfile)))
 	mux.Handle("POST /api/v1/me/verification", s.requireAuth(http.HandlerFunc(s.handleRequestVerification)))
+	mux.Handle("POST /api/v1/me/phone/send-code", s.requireAuth(http.HandlerFunc(s.handleSendPhoneCode)))
+	mux.Handle("POST /api/v1/me/phone/verify", s.requireAuth(http.HandlerFunc(s.handleVerifyPhoneCode)))
 	mux.Handle("GET /api/v1/me/listings", s.requireAuth(http.HandlerFunc(s.handleMyListings)))
 	mux.Handle("GET /api/v1/me/summary", s.requireAuth(http.HandlerFunc(s.handleMySummary)))
 
@@ -136,6 +145,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"service":      "cabin-api",
 		"ai_review":    s.verifier.Enabled(),
 		"review_model": s.verifier.ModelName(),
+		"sms_gateway":  s.sms.Name(),
 	})
 }
 

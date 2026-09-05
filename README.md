@@ -52,7 +52,7 @@ findings, and what each one became:
 ## Features
 
 - 🔐 **Auth** — register / login with JWT and Google sign-in; tokens in Keychain (iOS) and DataStore (Android)
-- ✅ **Automated verification** — every listing is screened by Claude before it earns a badge; accounts can request identity verification
+- ✅ **Automated verification** — every listing is screened by Claude before it earns a badge; accounts prove their mobile number by SMS, then request identity verification
 - 🚩 **Reporting & moderation** — report a listing, admin queue, automatic re-screening
 - 🔎 **Browse & search** — full-text search, buy/rent and property-type filters, verified-only and freshness filters, sorting
 - 🗺️ **Map search** — pan the map to search a viewport
@@ -147,6 +147,7 @@ Both are left blank by default, and each feature stays dormant until you fill it
 | `GIDClientID` | `ios/project.yml` | Google sign-in button on iOS |
 | `GOOGLE_WEB_CLIENT_ID` | `android/app/build.gradle.kts` | Google sign-in on Android |
 | `MAPS_API_KEY` | `android/app/build.gradle.kts` | Android map screen (iOS uses MapKit, no key needed) |
+| `SMS_URL` / `SMS_API_KEY` | server env | Real SMS delivery for phone codes (otherwise codes go to the log) |
 
 ---
 
@@ -163,7 +164,9 @@ Base path: `/api/v1`. Authenticated endpoints require `Authorization: Bearer <to
 | `POST` | `/auth/google` | | Exchange a Google ID token → `{ token, user }` (501 if unconfigured) |
 | `GET` | `/auth/me` | ✓ | Current user |
 | `PATCH` | `/me` | ✓ | Update your profile |
-| `POST` | `/me/verification` | ✓ | Submit your account for identity review |
+| `POST` | `/me/phone/send-code` | ✓ | Text a one-time code to confirm your number |
+| `POST` | `/me/phone/verify` | ✓ | Confirm the code → sets `phone_verified` |
+| `POST` | `/me/verification` | ✓ | Submit your account for identity review (needs a confirmed number) |
 | `GET` | `/me/summary` | ✓ | Badge counts (unread, viewings, listings needing attention) |
 | `GET` | `/users/{id}` | | Public profile |
 
@@ -260,6 +263,12 @@ given away by accident.
 flagged, so the app has to let them act on it. Editing reviewed content — or removing a
 photo, since photo count feeds the review — sends the listing back for a fresh check, so
 a badge can never be inherited by different content.
+
+**Phone numbers are proven, not typed.** Account verification requires a mobile number
+confirmed by SMS. Codes are hashed at rest, expire in 10 minutes, allow 5 attempts and 5
+sends a day, and changing your number drops the proof. Without `SMS_URL` the code is
+written to the server log and echoed in the API response so the flow works locally —
+production refuses to run against the simulated sender rather than pretending.
 
 **Viewings auto-complete 24 hours after their slot.** Completing a viewing is what
 unlocks reviews. Leaving that solely with the listing owner gave a badly-behaved owner a
