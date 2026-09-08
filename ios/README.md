@@ -28,6 +28,14 @@ Native iOS client for Cabin, built with SwiftUI and the Observation framework.
 > **Physical device:** set `baseURL` in [`Cabin/Support/Config.swift`](Cabin/Support/Config.swift)
 > to your Mac's LAN IP (e.g. `http://192.168.1.20:8080`).
 
+## Design
+
+The UI follows the **Cabin Soft** hand-off from Claude Design (soft rounded surfaces on a
+green-to-cream ground, near-black primary actions, Outfit type). Tokens live in
+`Cabin/Support/Theme.swift`; reusable pieces (cards, tiles, tags, pill buttons, the floating
+tab bar) in `Cabin/Views/SoftComponents.swift`. The Outfit fonts (SIL OFL) are bundled from
+`Cabin/Resources/Fonts` and registered through `UIAppFonts` in `project.yml`.
+
 ## Stack
 
 - **SwiftUI** + `NavigationStack`, `TabView`

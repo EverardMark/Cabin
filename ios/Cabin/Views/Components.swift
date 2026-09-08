@@ -6,6 +6,14 @@ struct RemoteImage: View {
     var contentMode: ContentMode = .fill
 
     var body: some View {
+        // Fill-mode images propose their intrinsic size and would widen the
+        // parent; sizing from a clear base keeps them inside whatever frame
+        // the caller gives.
+        Color.clear.overlay { content }.clipped()
+    }
+
+    @ViewBuilder
+    private var content: some View {
         Group {
             if let url, let resolved = Format.imageURL(url) {
                 AsyncImage(url: resolved) { phase in
@@ -24,11 +32,10 @@ struct RemoteImage: View {
                 placeholder
             }
         }
-        .clipped()
     }
 
     private var placeholder: some View {
-        Rectangle().fill(Color(.secondarySystemBackground))
+        SoftPhotoPlaceholder()
     }
 }
 

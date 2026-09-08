@@ -3,6 +3,7 @@ import SwiftUI
 struct ListingDetailView: View {
     let listingId: String
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
     @State private var listing: Listing?
     @State private var comparison: PriceComparison?
@@ -20,87 +21,89 @@ struct ListingDetailView: View {
     private var isMine: Bool { listing?.userId == appState.currentUser?.id }
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
+            SoftHeader {
+                CircleButton(systemImage: "chevron.left") { dismiss() }
+            } title: {
+                EmptyView()
+            } trailing: {
+                if listing != nil {
+                    if isMine {
+                        CircleButton(systemImage: "pencil") { showEdit = true }
+                    } else {
+                        CircleButton(systemImage: "flag") { showReport = true }
+                    }
+                }
+            }
+
             if loading {
-                ProgressView()
+                Spacer()
+                ProgressView().tint(Color.softInk)
+                Spacer()
             } else if let listing {
                 content(listing)
             } else {
-                ContentUnavailableView(
-                    "Couldn't load listing",
-                    systemImage: "exclamationmark.triangle",
-                    description: Text(errorMessage ?? "")
-                )
+                SoftEmpty(systemImage: "exclamationmark.triangle", title: "Couldn't load listing",
+                          message: errorMessage ?? "", actionTitle: "Retry") { Task { await load() } }
+                Spacer()
             }
         }
-        .navigationBarTitleDisplayMode(.inline)
+        .softScreen()
+        .hidesSoftTabBar()
         .task { await load() }
     }
 
     @ViewBuilder
     private func content(_ listing: Listing) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                gallery(listing)
+            VStack(alignment: .leading, spacing: 16) {
+                heroCard(listing)
 
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack {
-                        Pill(text: listing.listingType == "rent" ? "For rent" : "For sale")
-                        Pill(
-                            text: Format.capitalized(listing.propertyType),
-                            background: Color(.secondarySystemBackground),
-                            foreground: .primary
-                        )
-                    }
+                trustCard(listing)
 
-                    Text(Format.price(listing.price, listingType: listing.listingType))
-                        .font(.title.bold())
-                        .foregroundStyle(Color.cabinForest)
+                HStack(spacing: 12) {
+                    SoftTile(systemImage: "bed.double", label: "Bedrooms", value: Format.beds(listing.bedrooms), compact: true)
+                    SoftTile(systemImage: "shower", label: "Bathrooms", value: Format.baths(listing.bathrooms), compact: true)
+                    SoftTile(systemImage: "square.dashed", label: "Area · sqft",
+                             value: listing.areaSqft > 0 ? "\(listing.areaSqft.formatted())" : "—", compact: true)
+                }
 
-                    Text(listing.title).font(.title3.weight(.semibold))
+                if let comparison, comparison.sampleSize >= 3 {
+                    PriceComparisonCard(comparison: comparison)
+                }
 
-                    let address = fullAddress(listing)
-                    if !address.isEmpty {
-                        Label(address, systemImage: "mappin.and.ellipse")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    // Trust comes before the sales copy.
-                    TrustPanel(listing: listing)
-                    if listing.isStale { StaleWarning() }
-
-                    featureCard(listing)
-
-                    if let comparison, comparison.sampleSize >= 3 {
-                        PriceComparisonCard(comparison: comparison)
-                    }
-
-                    if !listing.description.isEmpty {
-                        Text("About this property").font(.headline).padding(.top, 4)
-                        Text(listing.description)
-                            .foregroundStyle(.primary.opacity(0.85))
-                    }
-
-                    if let owner = listing.owner {
-                        Text("Listed by").font(.headline).padding(.top, 4)
-                        NavigationLink {
-                            UserProfileView(userId: owner.id)
-                        } label: {
-                            PosterCard(owner: owner, onViewProfile: {})
-                                .allowsHitTesting(false)
+                if !listing.description.isEmpty {
+                    SoftCard {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("About this property").font(.softCardTitle)
+                            Text(listing.description)
+                                .font(.soft(16)).foregroundStyle(Color.softTextSoft)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
-                        .buttonStyle(.plain)
-                    }
-
-                    if isMine {
-                        ownerActions(listing)
-                    } else {
-                        buyerActions(listing)
                     }
                 }
-                .padding(16)
+
+                if let owner = listing.owner {
+                    Text("Listed by")
+                        .font(.softSmall).foregroundStyle(Color.softSecondary)
+                        .padding(.leading, 8)
+                    NavigationLink { UserProfileView(userId: owner.id) } label: {
+                        PosterRow(owner: owner)
+                    }
+                    .buttonStyle(SoftPressStyle())
+                }
+
+                if isMine {
+                    ownerActions(listing)
+                } else {
+                    SoftLink(title: "Report this listing", muted: true) { showReport = true }
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 4)
+                }
             }
+            .padding(.horizontal, 20)
+            .padding(.top, 22)
+            .padding(.bottom, 48)
         }
         .navigationDestination(item: $openedConversation) { conv in
             ChatView(conversation: conv)
@@ -131,136 +134,202 @@ struct ListingDetailView: View {
         }
     }
 
-    /// What a buyer can do: message, book a viewing, or report the listing.
-    @ViewBuilder
-    private func buyerActions(_ listing: Listing) -> some View {
-        VStack(spacing: 10) {
-            Button {
-                Task { await startChat(listing) }
-            } label: {
-                Label("Message the poster", systemImage: "bubble.left.and.bubble.right.fill")
+    // MARK: - Hero card: photos, title, tiles, actions
+
+    private func heroCard(_ listing: Listing) -> some View {
+        SoftCard {
+            VStack(alignment: .leading, spacing: 0) {
+                gallery(listing)
+                    .frame(height: 300)
                     .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+                    .clipShape(RoundedRectangle(cornerRadius: SoftRadius.image, style: .continuous))
+                    .overlay(alignment: .topLeading) { PhotoTags(listing: listing).padding(14) }
 
-            Button {
-                showBooking = true
-            } label: {
-                Label("Request a viewing", systemImage: "calendar.badge.plus")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
+                HStack(alignment: .top, spacing: 12) {
+                    Text(listing.title)
+                        .font(.softHeading).tracking(-0.28)
+                        .lineSpacing(-2)
+                    Spacer(minLength: 0)
+                    OTag(text: listing.listingType == "rent" ? "For rent" : "For sale", filled: true)
+                        .padding(.top, 6)
+                }
+                .padding(.top, 22)
 
-            Button(role: .destructive) {
-                showReport = true
-            } label: {
-                Label("Report this listing", systemImage: "flag")
-                    .font(.subheadline)
-            }
-            .padding(.top, 2)
-        }
-        .padding(.top, 8)
-    }
+                Text(ListingMeta.line(listing))
+                    .font(.softSmall).foregroundStyle(Color.softSecondary)
+                    .padding(.top, 8)
 
-    /// What the owner sees instead: keep the listing fresh, and promote it.
-    @ViewBuilder
-    private func ownerActions(_ listing: Listing) -> some View {
-        VStack(spacing: 10) {
-            if listing.isFeatured, let until = Format.date(from: listing.featuredUntil ?? "") {
-                Label("Featured until \(until.formatted(.dateTime.day().month(.abbreviated)))",
-                      systemImage: "star.fill")
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(Color.cabinClay)
-            }
+                let address = fullAddress(listing)
+                if !address.isEmpty {
+                    HStack(spacing: 6) {
+                        Image(systemName: "mappin").font(.system(size: 13, weight: .light))
+                        Text(address).font(.soft(14))
+                    }
+                    .foregroundStyle(Color.softSecondary)
+                    .padding(.top, 6)
+                }
 
-            // Editing is the repair path for a flagged listing — the trust
-            // panel tells owners what to fix, so it has to be reachable.
-            Button {
-                showEdit = true
-            } label: {
-                Label("Edit listing", systemImage: "pencil")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+                if listing.isStale {
+                    Text("The owner hasn't confirmed this is still available in over a month.")
+                        .font(.soft(14)).foregroundStyle(Color.softClay)
+                        .padding(.top, 8)
+                }
 
-            Button {
-                showPromote = true
-            } label: {
-                Label(listing.isFeatured ? "Extend featuring" : "Feature this listing",
-                      systemImage: "star")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .tint(.cabinClay)
-            .disabled(listing.verificationStatus != .verified)
+                HStack(spacing: 12) {
+                    SoftTile(systemImage: "tag", label: "Asking price",
+                             value: Format.compactPrice(listing.price) + (listing.listingType == "rent" ? "/mo" : ""))
+                    SoftTile(systemImage: "checkmark.shield", label: "Trust score", value: "\(listing.verificationScore)")
+                }
+                .padding(.top, 20)
 
-            if listing.verificationStatus != .verified {
-                Text("Only verified listings can be featured. Featuring buys placement, not a badge — so a listing has to pass screening first.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if listing.isStale {
-                Text("Buyers are shown a warning on listings that haven't been confirmed recently.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            Button {
-                Task { await confirmAvailability() }
-            } label: {
-                if confirmingAvailability {
-                    ProgressView().frame(maxWidth: .infinity)
+                if isMine {
+                    HStack(spacing: 10) {
+                        PrimaryButton(title: "Edit listing", systemImage: "pencil") { showEdit = true }
+                        SecondaryButton(title: listing.isFeatured ? "Extend featuring" : "Feature it",
+                                        systemImage: "star", tint: .softTile) { showPromote = true }
+                            .disabled(listing.verificationStatus != .verified)
+                            .opacity(listing.verificationStatus == .verified ? 1 : 0.45)
+                    }
+                    .padding(.top, 16)
                 } else {
-                    Label("Confirm it's still available", systemImage: "checkmark.circle")
-                        .frame(maxWidth: .infinity)
+                    HStack(spacing: 10) {
+                        PrimaryButton(title: "Message \(listing.owner?.name.split(separator: " ").first.map(String.init) ?? "poster")") {
+                            Task { await startChat(listing) }
+                        }
+                        SecondaryButton(title: "Book a viewing", tint: .softTile) { showBooking = true }
+                    }
+                    .padding(.top, 16)
                 }
             }
-            .buttonStyle(.bordered)
-            .controlSize(.large)
-            .disabled(confirmingAvailability)
         }
-        .padding(.top, 8)
+    }
+
+    // MARK: - Trust panel
+
+    private func trustCard(_ listing: Listing) -> some View {
+        SoftCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 12) {
+                    ZStack {
+                        Circle().fill(trustFill(listing.verificationStatus))
+                        Image(systemName: listing.verificationStatus.symbol)
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(trustGlyph(listing.verificationStatus))
+                    }
+                    .frame(width: 44, height: 44)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(trustHeadline(listing.verificationStatus)).font(.softCardTitle)
+                        Text("Trust score \(listing.verificationScore)/100 · screened")
+                            .font(.soft(13)).foregroundStyle(Color.softSecondary)
+                    }
+                }
+
+                if !listing.verificationSummary.isEmpty {
+                    Text(listing.verificationSummary)
+                        .font(.soft(15)).foregroundStyle(Color.softTextSoft)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                if !listing.verificationFlags.isEmpty {
+                    FlowTags(tags: listing.verificationFlags.map(Format.flagLabel))
+                }
+
+                if listing.reportCount > 0 {
+                    HStack(spacing: 6) {
+                        Image(systemName: "flag.fill").font(.system(size: 12))
+                        Text("\(listing.reportCount) user report\(listing.reportCount == 1 ? "" : "s") on this listing")
+                            .font(.soft(14, .regular))
+                    }
+                    .foregroundStyle(Color.softRed)
+                }
+
+                // Say plainly what the badge does and does not mean.
+                Text("Screened automatically for scam and quality signals. A badge is not proof of ownership — view in person before paying anything.")
+                    .font(.soft(13)).foregroundStyle(Color.softSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private func trustHeadline(_ status: VerificationStatus) -> String {
+        switch status {
+        case .verified:   return "Screened and verified"
+        case .flagged:    return "Verified with warnings"
+        case .rejected:   return "Failed screening"
+        case .pending:    return "Being screened now"
+        case .unverified: return "Not screened yet"
+        }
+    }
+
+    private func trustFill(_ status: VerificationStatus) -> Color {
+        switch status {
+        case .verified: return .softInk
+        case .flagged:  return .softClay
+        case .rejected: return .softRed
+        default:        return .softTile
+        }
+    }
+
+    private func trustGlyph(_ status: VerificationStatus) -> Color {
+        switch status {
+        case .verified, .flagged, .rejected: return .white
+        default: return .softTextSoft
+        }
+    }
+
+    // MARK: - Owner tools
+
+    @ViewBuilder
+    private func ownerActions(_ listing: Listing) -> some View {
+        SoftCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Keep it fresh").font(.softCardTitle)
+                if listing.isFeatured, let until = Format.date(from: listing.featuredUntil ?? "") {
+                    HStack(spacing: 6) {
+                        Image(systemName: "star").font(.system(size: 12))
+                        Text("Featured until \(until.formatted(.dateTime.day().month(.abbreviated)))")
+                            .font(.soft(14, .regular))
+                    }
+                    .foregroundStyle(Color.softTextSoft)
+                }
+                if listing.verificationStatus != .verified {
+                    Text("Only verified listings can be featured. Featuring buys placement, not a badge — so a listing has to pass screening first.")
+                        .font(.soft(13)).foregroundStyle(Color.softSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(listing.isStale
+                     ? "Buyers are shown a warning on listings that haven't been confirmed recently."
+                     : "Confirming availability keeps the stale warning off your listing.")
+                    .font(.soft(13)).foregroundStyle(Color.softSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                SecondaryButton(title: "Confirm it's still available", systemImage: "checkmark.circle",
+                                tint: .softTile, loading: confirmingAvailability) {
+                    Task { await confirmAvailability() }
+                }
+            }
+        }
     }
 
     private func gallery(_ listing: Listing) -> some View {
         Group {
             if listing.images.isEmpty {
                 ZStack {
-                    RemoteImage(url: nil)
+                    SoftPhotoPlaceholder()
                     VStack(spacing: 6) {
-                        Image(systemName: "photo.badge.exclamationmark").font(.largeTitle)
-                        Text("No photos yet").font(.subheadline)
+                        Image(systemName: "photo").font(.system(size: 28, weight: .light))
+                        Text("No photos yet").font(.soft(14))
                     }
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.softText.opacity(0.6))
                 }
-                .frame(height: 280)
-                .frame(maxWidth: .infinity)
             } else {
                 TabView {
                     ForEach(listing.images) { image in
-                        RemoteImage(url: image.url)
-                            .frame(maxWidth: .infinity)
+                        RemoteImage(url: image.url).frame(maxWidth: .infinity)
                     }
                 }
                 .tabViewStyle(.page(indexDisplayMode: listing.images.count > 1 ? .automatic : .never))
-                .frame(height: 280)
             }
         }
-    }
-
-    private func featureCard(_ listing: Listing) -> some View {
-        HStack {
-            FeatureStat(value: Format.beds(listing.bedrooms), label: "Bedrooms")
-            Divider().frame(height: 34)
-            FeatureStat(value: Format.baths(listing.bathrooms), label: "Bathrooms")
-            Divider().frame(height: 34)
-            FeatureStat(value: Format.area(listing.areaSqft), label: "Area")
-        }
-        .padding(.vertical, 14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 16))
     }
 
     private func fullAddress(_ listing: Listing) -> String {
@@ -301,59 +370,108 @@ struct ListingDetailView: View {
     }
 }
 
+/// Owner / agent row on the listing detail screen.
+struct PosterRow: View {
+    let owner: UserSummary
+
+    var body: some View {
+        SoftRow {
+            SoftAvatar(name: owner.name, size: 44)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(owner.name).font(.softBody)
+                HStack(spacing: 6) {
+                    if owner.isVerified {
+                        VTag(text: "Verified")
+                    } else {
+                        OTag(text: "Not verified")
+                    }
+                    if owner.isAgent { OTag(text: "Agent") }
+                    if owner.ratingCount > 0 {
+                        OTag(text: String(format: "★ %.1f · %d", owner.ratingAvg, owner.ratingCount))
+                    }
+                }
+            }
+            Spacer(minLength: 4)
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .light))
+                .foregroundStyle(Color.softMuted)
+                .padding(.trailing, 4)
+        }
+    }
+}
+
+/// Wrapping row of outlined tags (verification flags).
+struct FlowTags: View {
+    let tags: [String]
+
+    var body: some View {
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+        return GeometryReader { geo in
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(tags.enumerated()), id: \.offset) { index, tag in
+                    OTag(text: tag)
+                        .padding([.trailing, .bottom], 6)
+                        .alignmentGuide(.leading) { d in
+                            if abs(width - d.width) > geo.size.width { width = 0; height -= d.height }
+                            let result = width
+                            if index == tags.count - 1 { width = 0 } else { width -= d.width }
+                            return result
+                        }
+                        .alignmentGuide(.top) { _ in
+                            let result = height
+                            if index == tags.count - 1 { height = 0 }
+                            return result
+                        }
+                }
+            }
+        }
+        .frame(height: CGFloat((tags.count + 2) / 3) * 34)
+    }
+}
+
 /// Answers "is this price reasonable?" — 46% of respondents asked for exactly this.
 struct PriceComparisonCard: View {
     let comparison: PriceComparison
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Label("Price check", systemImage: "chart.bar.xaxis").font(.headline)
-                Spacer()
-                Text(comparison.verdictLabel)
-                    .font(.caption.weight(.semibold))
-                    .padding(.horizontal, 8).padding(.vertical, 4)
-                    .background(tint.opacity(0.15), in: Capsule())
-                    .foregroundStyle(tint)
-            }
-
-            Text("Compared with \(comparison.sampleSize) similar listings nearby, this is \(differenceText) the median of \(Format.compactPrice(comparison.median)).")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            // A simple range bar showing where this listing sits.
-            GeometryReader { geo in
-                let span = max(1, comparison.max - comparison.min)
-                let ratio = min(max(Double(comparison.price - comparison.min) / Double(span), 0), 1)
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color(.tertiarySystemFill)).frame(height: 6)
-                    Circle()
-                        .fill(tint)
-                        .frame(width: 12, height: 12)
-                        .offset(x: max(0, ratio * (geo.size.width - 12)))
+        SoftCard {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Price check").font(.softCardTitle)
+                    Spacer()
+                    if comparison.verdict == "below_market" {
+                        VTag(text: comparison.verdictLabel)
+                    } else {
+                        OTag(text: comparison.verdictLabel)
+                    }
                 }
-                .frame(height: 12)
-            }
-            .frame(height: 12)
 
-            HStack {
-                Text(Format.compactPrice(comparison.min))
-                Spacer()
-                Text(Format.compactPrice(comparison.max))
-            }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-        }
-        .padding(14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
-    }
+                Text("Compared with \(comparison.sampleSize) similar listings nearby, this is \(differenceText) the median of \(Format.compactPrice(comparison.median)).")
+                    .font(.soft(15)).foregroundStyle(Color.softTextSoft)
+                    .fixedSize(horizontal: false, vertical: true)
 
-    private var tint: Color {
-        switch comparison.verdict {
-        case "below_market": return .cabinForest
-        case "above_market": return .cabinClay
-        default: return .secondary
+                GeometryReader { geo in
+                    let span = max(1, comparison.max - comparison.min)
+                    let ratio = min(max(Double(comparison.price - comparison.min) / Double(span), 0), 1)
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.softTile).frame(height: 8)
+                        Circle()
+                            .fill(Color.softInk)
+                            .frame(width: 14, height: 14)
+                            .offset(x: max(0, ratio * (geo.size.width - 14)))
+                    }
+                    .frame(height: 14)
+                }
+                .frame(height: 14)
+
+                HStack {
+                    Text(Format.compactPrice(comparison.min))
+                    Spacer()
+                    Text(Format.compactPrice(comparison.max))
+                }
+                .font(.soft(13)).foregroundStyle(Color.softSecondary)
+            }
         }
     }
 
@@ -438,7 +556,6 @@ struct ReportListingSheet: View {
     }
 }
 
-
 /// Buying promoted placement for a listing you own.
 ///
 /// Featured listings were the survey's one unanimous supply-side ask — every
@@ -479,9 +596,8 @@ struct PromoteListingSheet: View {
                                     Spacer()
                                     Text(Format.price(plan.price, listingType: "sale"))
                                         .font(.subheadline.weight(.semibold))
-                                        .foregroundStyle(Color.cabinForest)
                                     Image(systemName: selected == plan.id ? "checkmark.circle.fill" : "circle")
-                                        .foregroundStyle(selected == plan.id ? Color.cabinForest : .secondary)
+                                        .foregroundStyle(selected == plan.id ? Color.softInk : .secondary)
                                 }
                             }
                             .buttonStyle(.plain)

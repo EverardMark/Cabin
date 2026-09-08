@@ -2,6 +2,14 @@
 
 Native Android client for Cabin, built with Kotlin and Jetpack Compose (Material 3).
 
+## Design
+
+The UI follows the **Cabin Soft** hand-off from Claude Design, matching the iOS app: soft
+rounded surfaces on a green-to-cream ground, near-black primary actions, Outfit type.
+Tokens live in `ui/theme/` (`Color.kt`, `Type.kt`, `Theme.kt`); reusable pieces (cards,
+tiles, tags, pill buttons, the floating tab bar) in `ui/common/Soft.kt`. Outfit (SIL OFL) is
+bundled under `res/font/`; the licence is `src/main/OUTFIT-FONT-LICENSE.txt`.
+
 ## Requirements
 
 - Android Studio (Ladybug or newer)

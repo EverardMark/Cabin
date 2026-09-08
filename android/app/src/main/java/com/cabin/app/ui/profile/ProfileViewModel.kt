@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 data class ProfileUiState(
     val loading: Boolean = true,
     val listings: List<Listing> = emptyList(),
+    val savedSearches: List<com.cabin.app.data.model.SavedSearch> = emptyList(),
     val error: String? = null,
     val verifying: Boolean = false,
     val verificationMessage: String? = null,
@@ -48,6 +49,7 @@ class ProfileViewModel : ViewModel() {
                 onSuccess = { list -> _state.update { it.copy(loading = false, listings = list) } },
                 onFailure = { e -> _state.update { it.copy(loading = false, error = e.userMessage()) } },
             )
+            repo.savedSearches().onSuccess { list -> _state.update { it.copy(savedSearches = list) } }
             repo.refreshSummary()
         }
     }

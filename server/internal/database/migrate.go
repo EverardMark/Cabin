@@ -51,6 +51,7 @@ func applyColumnMigrations(db *sql.DB, driver string) error {
 
 	alters := []string{
 		fmt.Sprintf("ALTER TABLE users ADD COLUMN google_id %s NOT NULL DEFAULT ''", text),
+		fmt.Sprintf("ALTER TABLE users ADD COLUMN apple_id %s NOT NULL DEFAULT ''", text),
 		fmt.Sprintf("ALTER TABLE users ADD COLUMN role %s NOT NULL DEFAULT 'user'", role),
 		// Trust & profile columns (survey: 86% rate verification "extremely important").
 		fmt.Sprintf("ALTER TABLE users ADD COLUMN phone %s NOT NULL DEFAULT ''", shortText),

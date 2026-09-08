@@ -212,6 +212,94 @@ func (s *Server) findOrCreateGoogleUser(claims *auth.GoogleClaims) (*models.User
 	return user, nil
 }
 
+type appleAuthRequest struct {
+	IdentityToken string `json:"identity_token"`
+	// Nonce is the raw value the app generated; its SHA-256 is inside the token.
+	Nonce string `json:"nonce"`
+	// Name is only supplied on the very first Apple sign-in for an account;
+	// Apple never sends it again, so it must be captured here.
+	Name string `json:"name"`
+}
+
+// handleAppleAuth signs a user in from a Sign in with Apple identity token. It
+// is disabled (501) until APPLE_CLIENT_ID is configured. Like Google, it links
+// or creates a user and issues our own JWT.
+func (s *Server) handleAppleAuth(w http.ResponseWriter, r *http.Request) {
+	if len(s.cfg.AppleClientIDs) == 0 {
+		writeError(w, http.StatusNotImplemented, "apple sign-in is not configured")
+		return
+	}
+	var req appleAuthRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.IdentityToken) == "" || strings.TrimSpace(req.Nonce) == "" {
+		writeError(w, http.StatusBadRequest, "identity_token and nonce are required")
+		return
+	}
+
+	claims, err := auth.VerifyAppleIdentityToken(r.Context(), req.IdentityToken, req.Nonce, s.cfg.AppleClientIDs)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "could not verify Apple account")
+		return
+	}
+
+	user, err := s.findOrCreateAppleUser(claims, strings.TrimSpace(req.Name))
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not sign you in")
+		return
+	}
+
+	token, err := s.tokens.Generate(user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not issue token")
+		return
+	}
+	writeJSON(w, http.StatusOK, authResponse{Token: token, User: *user})
+}
+
+// findOrCreateAppleUser mirrors findOrCreateGoogleUser: linked Apple id first,
+// then an existing account with the same email (linked), else a new account.
+func (s *Server) findOrCreateAppleUser(claims *auth.AppleClaims, name string) (*models.User, error) {
+	if user, err := s.users.GetByAppleID(claims.Sub); err == nil {
+		return user, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+
+	if user, err := s.users.GetByEmail(claims.Email); err == nil {
+		if linkErr := s.users.SetAppleID(user.ID, claims.Sub); linkErr != nil {
+			return nil, linkErr
+		}
+		user.AppleID = claims.Sub
+		user.EmailVerified = true
+		return user, nil
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return nil, err
+	}
+
+	if name == "" {
+		// Apple only shares the name on the first authorization; if that was
+		// missed (say, after a database reset) fall back to the mailbox part.
+		name = strings.SplitN(claims.Email, "@", 2)[0]
+	}
+	user := &models.User{
+		ID:                 uuid.NewString(),
+		Email:              claims.Email,
+		Name:               name,
+		Role:               "user",
+		AppleID:            claims.Sub,
+		EmailVerified:      true, // Apple asserted it (relay addresses included)
+		VerificationStatus: models.VerificationUnverified,
+		CreatedAt:          time.Now().UTC(),
+	}
+	if err := s.users.Create(user); err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	user, err := s.currentUser(r)
 	if err != nil {

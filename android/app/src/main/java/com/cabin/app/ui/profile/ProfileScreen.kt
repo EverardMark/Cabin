@@ -6,156 +6,157 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material3.Icon
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Surface
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.foundation.background
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.draw.clip
-import com.cabin.app.data.model.Verification
-import com.cabin.app.ui.common.AgentBadge
-import com.cabin.app.ui.common.RatingStars
-import com.cabin.app.ui.common.VerificationBadge
-import com.cabin.app.ui.common.verificationColor
-import com.cabin.app.ui.listings.ListingCard
-import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.material3.OutlinedTextField
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cabin.app.data.model.Listing
+import com.cabin.app.data.model.User
+import com.cabin.app.data.model.Verification
+import com.cabin.app.ui.common.AppMark
+import com.cabin.app.ui.common.CircleButton
+import com.cabin.app.ui.common.MessageDialog
+import com.cabin.app.ui.common.OTag
+import com.cabin.app.ui.common.SoftAvatarView
+import com.cabin.app.ui.common.SoftCard
+import com.cabin.app.ui.common.SoftChevron
+import com.cabin.app.ui.common.SoftError
+import com.cabin.app.ui.common.SoftHeader
+import com.cabin.app.ui.common.SoftLoading
+import com.cabin.app.ui.common.SoftPhoto
+import com.cabin.app.ui.common.SoftPrimaryButton
+import com.cabin.app.ui.common.SoftRow
+import com.cabin.app.ui.common.SoftSmallButton
+import com.cabin.app.ui.common.SoftTile
+import com.cabin.app.ui.common.VTag
+import com.cabin.app.ui.common.softClick
+import com.cabin.app.ui.listings.PhotoTags
+import com.cabin.app.ui.listings.PriceText
+import com.cabin.app.ui.theme.SoftAccent
+import com.cabin.app.ui.theme.SoftClay
+import com.cabin.app.ui.theme.SoftSecondary
+import com.cabin.app.ui.theme.SoftType
+import com.cabin.app.ui.theme.soft
+import com.cabin.app.util.Format
 
 @Composable
 fun ProfileScreen(
     onOpenListing: (String) -> Unit,
     onOpenSavedSearches: () -> Unit,
-    onOpenViewings: () -> Unit,
+    onOpenPost: () -> Unit,
     viewModel: ProfileViewModel = viewModel(),
 ) {
     val user by viewModel.user.collectAsStateWithLifecycle()
+    val summary by viewModel.summary.collectAsStateWithLifecycle()
     val state by viewModel.state.collectAsStateWithLifecycle()
     var showPhoneDialog by remember { mutableStateOf(false) }
+    var showEdit by remember { mutableStateOf(false) }
+    var showLogout by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
 
-    LazyColumn(
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp),
-    ) {
-        item {
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
-                Surface(shape = CircleShape, color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(56.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            user?.name?.firstOrNull()?.uppercase() ?: "?",
-                            color = MaterialTheme.colorScheme.onPrimary,
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                        )
+    Column(modifier = Modifier.fillMaxSize()) {
+        SoftHeader(
+            leading = { AppMark() },
+            title = { Text("Profile", style = SoftType.screenTitle) },
+            trailing = {
+                Box {
+                    CircleButton(Icons.Outlined.Settings, "Settings", onClick = { menuOpen = true })
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(text = { Text("Edit profile") }, onClick = { menuOpen = false; showEdit = true })
+                        DropdownMenuItem(text = { Text("Post a listing") }, onClick = { menuOpen = false; onOpenPost() })
+                        DropdownMenuItem(text = { Text("Log out") }, onClick = { menuOpen = false; showLogout = true })
                     }
                 }
-                Spacer(Modifier.size(14.dp))
-                Column {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(user?.name ?: "—", style = MaterialTheme.typography.titleLarge)
-                        if (user?.isAgent == true) {
-                            Spacer(Modifier.size(8.dp))
-                            AgentBadge()
-                        }
-                    }
-                    Text(
-                        user?.email ?: "",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    )
-                    RatingStars(user?.ratingAvg ?: 0.0, user?.ratingCount ?: 0)
+            },
+        )
+
+        LazyColumn(
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 24.dp, bottom = 120.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            item { IdentityCard(user) }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    SoftTile(Icons.Outlined.Home, "Active listings", state.listings.count { it.status == "active" }.toString(), modifier = Modifier.weight(1f))
+                    SoftTile(Icons.Outlined.CalendarMonth, "Requests to answer", summary.pendingViewingRequests.toString(), modifier = Modifier.weight(1f))
                 }
             }
-
-            VerificationCard(
-                status = user?.verificationStatus ?: Verification.UNVERIFIED,
-                notes = user?.verificationNotes.orEmpty(),
-                verifying = state.verifying,
-                phoneVerified = user?.phoneVerified == true,
-                onRequest = viewModel::requestVerification,
-                onConfirmPhone = {
-                    viewModel.resetPhoneFlow()
-                    showPhoneDialog = true
-                },
-            )
-            Spacer(Modifier.height(10.dp))
-
-            OutlinedButton(onClick = onOpenSavedSearches, modifier = Modifier.fillMaxWidth()) {
-                Text("Saved searches")
+            item {
+                val newMatches = state.savedSearches.sumOf { it.newMatches }
+                SoftRow(onClick = onOpenSavedSearches) {
+                    Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                        Text("Saved searches", style = SoftType.body)
+                        Text(state.savedSearches.firstOrNull()?.name ?: "Get alerted when new listings match", style = SoftType.caption, color = SoftSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                    if (newMatches > 0) VTag("$newMatches new", icon = null, tint = SoftAccent) else SoftChevron()
+                }
             }
-            Spacer(Modifier.height(6.dp))
-            OutlinedButton(onClick = onOpenViewings, modifier = Modifier.fillMaxWidth()) {
-                Text("My viewings")
-            }
-            Spacer(Modifier.height(10.dp))
-            OutlinedButton(
-                onClick = viewModel::logout,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.size(8.dp))
-                Text("Log out")
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                "My listings",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-        }
-
-        when {
-            state.loading -> item {
-                Text("Loading…", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-            }
-            state.error != null -> item {
-                Text(state.error!!, color = MaterialTheme.colorScheme.error)
-            }
-            state.listings.isEmpty() -> item {
-                Text(
-                    "You haven't posted anything yet. Tap Post to add your first listing — owners, agents and renters can all post.",
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                )
-            }
-            else -> items(state.listings, key = { it.id }) { listing ->
-                Column {
-                    ListingCard(listing = listing, onClick = { onOpenListing(listing.id) })
-                    if (listing.verificationStatus == Verification.REJECTED ||
-                        listing.verificationStatus == Verification.FLAGGED
-                    ) {
+            item {
+                // A confirmed number is the prerequisite for the badge: it means somebody is reachable.
+                SoftRow(onClick = { viewModel.resetPhoneFlow(); showPhoneDialog = true }) {
+                    Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                        Text("Mobile number", style = SoftType.body)
                         Text(
-                            listing.verificationSummary.ifBlank { Verification.label(listing.verificationStatus) },
-                            style = MaterialTheme.typography.labelMedium,
-                            color = verificationColor(listing.verificationStatus),
-                            modifier = Modifier.padding(top = 4.dp),
+                            when {
+                                user?.phoneVerified == true -> "${Format.maskedPhone(user?.phone.orEmpty())} · confirmed by SMS"
+                                user?.phone.isNullOrBlank() -> "Add and confirm your number"
+                                else -> "${user?.phone} · not confirmed yet"
+                            },
+                            style = SoftType.caption,
+                            color = if (user?.phoneVerified == true) SoftSecondary else SoftClay,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
                         )
                     }
+                    SoftChevron()
+                }
+            }
+            if (user?.verificationStatus != Verification.VERIFIED) {
+                item { VerificationRow(user, state.verifying, viewModel::requestVerification) }
+            }
+            item {
+                SoftPrimaryButton("Post a listing", onClick = onOpenPost, icon = Icons.Outlined.Add, large = true, modifier = Modifier.fillMaxWidth().padding(top = 4.dp))
+            }
+            item {
+                Text("My listings", style = SoftType.small, color = SoftSecondary, modifier = Modifier.padding(horizontal = 8.dp).padding(top = 10.dp))
+            }
+            when {
+                state.loading -> item { SoftLoading() }
+                state.error != null -> item { SoftError(state.error) }
+                state.listings.isEmpty() -> item {
+                    Text("You haven't posted anything yet. Owners, agents and renters can all post.", style = SoftType.small, color = SoftSecondary, modifier = Modifier.padding(horizontal = 8.dp))
+                }
+                else -> items(state.listings, key = { it.id }) { listing ->
+                    MyListingCard(listing, onClick = { onOpenListing(listing.id) })
                 }
             }
         }
@@ -170,74 +171,132 @@ fun ProfileScreen(
             onDismiss = { showPhoneDialog = false },
         )
     }
+    if (showEdit) {
+        EditProfileDialog(user, saving = state.savingProfile, onDismiss = { showEdit = false }) { name, phone, bio, licence, agent ->
+            viewModel.saveProfile(name, phone, bio, licence, agent)
+            showEdit = false
+        }
+    }
+    if (showLogout) {
+        AlertDialog(
+            onDismissRequest = { showLogout = false },
+            title = { Text("Log out of Cabin?") },
+            confirmButton = { TextButton(onClick = { showLogout = false; viewModel.logout() }) { Text("Log out") } },
+            dismissButton = { TextButton(onClick = { showLogout = false }) { Text("Cancel") } },
+        )
+    }
+    state.verificationMessage?.let { MessageDialog("Verification", it, viewModel::clearVerificationMessage) }
 }
 
-/** The account's own verification state, and the way to earn the badge. */
 @Composable
-private fun VerificationCard(
-    status: String,
-    notes: String,
-    verifying: Boolean,
-    phoneVerified: Boolean,
-    onRequest: () -> Unit,
-    onConfirmPhone: () -> Unit,
-) {
-    val tint = verificationColor(status)
-    Column(
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(tint.copy(alpha = 0.08f))
-            .padding(14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                if (status == Verification.VERIFIED) "Your account is verified" else "Get verified",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f),
-            )
-            VerificationBadge(status)
-        }
-        Text(
-            notes.ifBlank {
-                "Verified accounts get a badge on every listing they post. 86% of people we surveyed said verification is what decides whether they trust a listing."
-            },
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        // A confirmed number is the prerequisite: the badge is meant to mean
-        // somebody is reachable, not that they typed a number in.
-        if (!phoneVerified) {
-            Text(
-                "Mobile number not confirmed",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.tertiary,
-            )
-            Button(onClick = onConfirmPhone, modifier = Modifier.fillMaxWidth()) {
-                Text("Confirm my number")
-            }
-        } else {
-            Text(
-                "Mobile number confirmed",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            if (status != Verification.VERIFIED) {
-                Button(onClick = onRequest, enabled = !verifying, modifier = Modifier.fillMaxWidth()) {
-                    Text(if (verifying) "Checking…" else "Request verification")
+private fun IdentityCard(user: User?) {
+    SoftCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            SoftAvatarView(user?.name ?: "?", size = 72.dp)
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(user?.name ?: "—", style = SoftType.screenTitle, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(
+                    when {
+                        user == null -> ""
+                        user.isAgent && user.licenseNo.isNotBlank() -> "Licensed agent · ${user.licenseNo}"
+                        user.isAgent -> "Real estate agent"
+                        else -> user.email
+                    },
+                    style = SoftType.small, color = SoftSecondary, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 4.dp)) {
+                    if (user?.isVerified == true) VTag("Account verified")
+                    else OTag(if (user?.verificationStatus == Verification.PENDING) "Under review" else "Not verified")
+                    if (user != null && user.ratingCount > 0) OTag("★ %.1f · %d".format(user.ratingAvg, user.ratingCount))
                 }
             }
         }
     }
 }
 
+@Composable
+private fun VerificationRow(user: User?, verifying: Boolean, onRequest: () -> Unit) {
+    SoftRow {
+        Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+            Text("Identity verification", style = SoftType.body)
+            Text(
+                when {
+                    !user?.verificationNotes.isNullOrBlank() -> user!!.verificationNotes
+                    user?.phoneVerified == true -> if (user.isAgent) "Needs your PRC licence number and a short review." else "A short automated review of your account."
+                    else -> "Confirm your mobile number first."
+                },
+                style = SoftType.caption, color = SoftSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (user?.phoneVerified == true && user.verificationStatus != Verification.PENDING) {
+            SoftSmallButton(if (verifying) "…" else "Request", onClick = onRequest, enabled = !verifying)
+        } else {
+            OTag(if (user?.verificationStatus == Verification.PENDING) "Reviewing" else "Optional")
+        }
+    }
+}
 
-/**
- * Confirms a mobile number by SMS. Without it the verified badge was hollow —
- * `phone_verified` was never set by anything.
- */
+/** The owner's own listing: compact card plus the screening verdict when something needs fixing. */
+@Composable
+private fun MyListingCard(listing: Listing, onClick: () -> Unit) {
+    SoftCard(padding = 12.dp, modifier = Modifier.softClick(onClick = onClick)) {
+        Box(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+            SoftPhoto(url = listing.images.firstOrNull()?.url, modifier = Modifier.fillMaxSize())
+            PhotoTags(listing, modifier = Modifier.padding(12.dp))
+        }
+        Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(horizontal = 8.dp).padding(top = 12.dp)) {
+            Text(listing.title, style = soft(18), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            PriceText(listing.price, listing.listingType, size = 16)
+        }
+        val warning = when {
+            listing.verificationStatus == Verification.FLAGGED || listing.verificationStatus == Verification.REJECTED ->
+                listing.verificationSummary.ifBlank { Verification.label(listing.verificationStatus) }
+            Format.isStale(listing.lastConfirmedAt, listing.createdAt) -> "Not confirmed recently — open it and tap “still available”."
+            else -> null
+        }
+        if (warning != null) {
+            Text(warning, style = SoftType.caption, color = SoftClay, maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 8.dp).padding(top = 4.dp))
+        }
+        Spacer(Modifier.height(4.dp))
+    }
+}
+
+@Composable
+private fun EditProfileDialog(
+    user: User?,
+    saving: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (name: String, phone: String, bio: String, licence: String, agent: Boolean) -> Unit,
+) {
+    var name by remember { mutableStateOf(user?.name.orEmpty()) }
+    var phone by remember { mutableStateOf(user?.phone.orEmpty()) }
+    var bio by remember { mutableStateOf(user?.bio.orEmpty()) }
+    var licence by remember { mutableStateOf(user?.licenseNo.orEmpty()) }
+    var agent by remember { mutableStateOf(user?.isAgent == true) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit profile") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(value = name, onValueChange = { name = it }, label = { Text("Full name") }, singleLine = true)
+                OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Mobile number") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
+                OutlinedTextField(value = bio, onValueChange = { bio = it }, label = { Text("Short bio") }, minLines = 2)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("I'm a real estate agent", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Switch(checked = agent, onCheckedChange = { agent = it })
+                }
+                if (agent) OutlinedTextField(value = licence, onValueChange = { licence = it }, label = { Text("PRC licence number") }, singleLine = true)
+                Text("Changing your number means you'll need to verify again.", style = MaterialTheme.typography.labelSmall, color = SoftSecondary)
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(name, phone, bio, licence, agent) }, enabled = !saving) { Text("Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
+/** Confirms a mobile number by SMS. */
 @Composable
 private fun PhoneVerificationDialog(
     initialPhone: String,
@@ -256,40 +315,16 @@ private fun PhoneVerificationDialog(
         text = {
             Column {
                 if (!awaitingCode) {
-                    OutlinedTextField(
-                        value = phone,
-                        onValueChange = { phone = it },
-                        label = { Text("Mobile number") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    )
+                    OutlinedTextField(value = phone, onValueChange = { phone = it }, label = { Text("Mobile number") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone))
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        "We'll text you a 6-digit code. Confirming your number is what earns the verified badge — people can tell a real poster from a throwaway.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text("We'll text you a 6-digit code. Confirming your number is what earns the verified badge.", style = MaterialTheme.typography.labelSmall, color = SoftSecondary)
                 } else {
-                    OutlinedTextField(
-                        value = code,
-                        onValueChange = { code = it },
-                        label = { Text("6-digit code") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    )
+                    OutlinedTextField(value = code, onValueChange = { code = it }, label = { Text("6-digit code") }, singleLine = true, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword))
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Sent to ${state.phoneCodeSentTo}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text("Sent to ${state.phoneCodeSentTo}", style = MaterialTheme.typography.labelSmall, color = SoftSecondary)
                     state.phoneDevCode?.let {
                         Spacer(Modifier.height(6.dp))
-                        Text(
-                            "Development code: $it (no SMS gateway configured)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                        )
+                        Text("Development code: $it (no SMS gateway configured)", style = MaterialTheme.typography.labelSmall, color = SoftClay)
                     }
                 }
                 state.phoneError?.let {
@@ -301,8 +336,7 @@ private fun PhoneVerificationDialog(
         confirmButton = {
             TextButton(
                 onClick = { if (awaitingCode) onVerify(code) else onSend(phone) },
-                enabled = !state.phoneBusy &&
-                    (if (awaitingCode) code.length == 6 else phone.count { it.isDigit() } >= 10),
+                enabled = !state.phoneBusy && (if (awaitingCode) code.length == 6 else phone.count { it.isDigit() } >= 10),
             ) { Text(if (awaitingCode) "Confirm" else "Send code") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },

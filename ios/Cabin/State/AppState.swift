@@ -7,6 +7,10 @@ final class AppState {
     var currentUser: User?
     /// Badge counts for the tab bar, refreshed on appear and after actions.
     var summary = HomeSummary()
+    /// True between registering and finishing the sign-up flow (confirm number,
+    /// then "Start browsing"). The root view keeps the onboarding screens up
+    /// while this is set even though the account is already signed in.
+    var onboarding = false
 
     let api: APIClient
     private let session: SessionStore
@@ -38,11 +42,17 @@ final class AppState {
             )
         )
         save(res)
+        onboarding = true
     }
 
     /// Exchanges a Google ID token for a Cabin session (server verifies + links/creates the account).
     func loginWithGoogle(idToken: String) async throws {
         save(try await api.googleSignIn(idToken: idToken))
+    }
+
+    /// Exchanges a Sign in with Apple identity token for a Cabin session.
+    func loginWithApple(identityToken: String, nonce: String, name: String) async throws {
+        save(try await api.appleSignIn(identityToken: identityToken, nonce: nonce, name: name))
     }
 
     private func save(_ res: AuthResponse) {
@@ -80,5 +90,6 @@ final class AppState {
         session.clear()
         currentUser = nil
         summary = HomeSummary()
+        onboarding = false
     }
 }

@@ -50,8 +50,13 @@ final class SessionStore {
 
     init() {
         token = Keychain.read(tokenKey)
-        if let data = UserDefaults.standard.data(forKey: userKey) {
+        // A cached user without a token can't make a single authenticated call
+        // (unsigned simulator builds, for one, can't persist Keychain items), so
+        // treat that as signed out rather than showing a broken session.
+        if token != nil, let data = UserDefaults.standard.data(forKey: userKey) {
             user = try? JSONDecoder().decode(User.self, from: data)
+        } else {
+            UserDefaults.standard.removeObject(forKey: userKey)
         }
     }
 

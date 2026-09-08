@@ -80,7 +80,9 @@ enum Format {
     /// "3 Sep at 2:00 PM"
     static func dateTime(_ raw: String) -> String {
         guard let date = date(from: raw) else { return "—" }
+        // The narrow no-break space the formatter puts before AM/PM has no glyph in Outfit.
         return date.formatted(.dateTime.day().month(.abbreviated).hour().minute())
+            .replacingOccurrences(of: "\u{202F}", with: " ")
     }
 
     /// "2h ago", "3d ago" — for chat lists and listing freshness.

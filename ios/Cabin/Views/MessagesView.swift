@@ -10,27 +10,40 @@ struct MessagesView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Group {
-            if loading && conversations.isEmpty {
-                ProgressView()
-            } else if conversations.isEmpty {
-                ContentUnavailableView {
-                    Label("No messages yet", systemImage: "bubble.left.and.bubble.right")
-                } description: {
-                    Text(errorMessage ?? "Message a poster from any listing and the thread will show up here.")
-                }
-            } else {
-                List(conversations) { conv in
-                    NavigationLink {
-                        ChatView(conversation: conv)
-                    } label: {
-                        ConversationRow(conversation: conv)
+        VStack(spacing: 0) {
+            SoftHeader {
+                AppMark()
+            } title: {
+                Text("Messages").font(.softScreenTitle)
+            } trailing: {
+                Color.clear.frame(width: 48, height: 48)
+            }
+
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    if loading && conversations.isEmpty {
+                        ProgressView().tint(Color.softInk).padding(.top, 40)
+                    } else if conversations.isEmpty {
+                        SoftEmpty(systemImage: "bubble.left", title: "No messages yet",
+                                  message: errorMessage ?? "Message a poster from any listing and the thread will show up here.")
+                    } else {
+                        ForEach(conversations) { conv in
+                            NavigationLink(value: conv) {
+                                ConversationRow(conversation: conv)
+                            }
+                            .buttonStyle(SoftPressStyle())
+                        }
                     }
                 }
-                .listStyle(.plain)
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 120)
             }
         }
-        .navigationTitle("Messages")
+        .softScreen()
+        .navigationDestination(for: Conversation.self) { conv in
+            ChatView(conversation: conv)
+        }
         .task { await load() }
         .refreshable { await load() }
     }
@@ -52,52 +65,51 @@ struct ConversationRow: View {
     let conversation: Conversation
 
     var body: some View {
-        HStack(spacing: 12) {
-            RemoteImage(url: conversation.listing?.images.first?.url)
-                .frame(width: 56, height: 56)
-                .clipShape(RoundedRectangle(cornerRadius: 10))
+        SoftRow {
+            SoftAvatar(name: conversation.counterparty?.name ?? "?", size: 48)
 
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
                     Text(conversation.counterparty?.name ?? "Conversation")
-                        .font(.subheadline.weight(.semibold))
+                        .font(.softBody)
                         .lineLimit(1)
                     if conversation.counterparty?.isVerified == true {
                         Image(systemName: "checkmark.seal.fill")
-                            .font(.caption2)
-                            .foregroundStyle(Color.cabinForest)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.softInk)
                     }
                 }
                 if let title = conversation.listing?.title {
-                    Text(title).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                    Text(title).font(.soft(13)).foregroundStyle(Color.softSecondary).lineLimit(1)
                 }
                 if let last = conversation.lastMessage {
-                    Text(last.body).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+                    Text(last.body).font(.soft(14)).foregroundStyle(Color.softLabel).lineLimit(1)
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 4)
 
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 6) {
                 if let at = conversation.lastMessageAt {
-                    Text(Format.relative(at)).font(.caption2).foregroundStyle(.tertiary)
+                    Text(Format.relative(at)).font(.soft(12)).foregroundStyle(Color.softMuted)
                 }
                 if conversation.unreadCount > 0 {
-                    Text("\(conversation.unreadCount)")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.cabinForest, in: Capsule())
+                    VTag(text: "\(conversation.unreadCount)", systemImage: nil, tint: .softAccent)
                 }
             }
+            .padding(.trailing, 4)
         }
-        .padding(.vertical, 4)
     }
 }
 
 struct ChatView: View {
-    let conversation: Conversation
+    @State private var conversation: Conversation
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+
+    init(conversation: Conversation) {
+        _conversation = State(initialValue: conversation)
+    }
 
     @State private var messages: [Message] = []
     @State private var draft = ""
@@ -105,27 +117,60 @@ struct ChatView: View {
     @State private var sending = false
     @State private var errorMessage: String?
 
+    private var counterpart: UserSummary? { conversation.counterparty }
+
     var body: some View {
         VStack(spacing: 0) {
-            if let listing = conversation.listing {
-                listingHeader(listing)
-                Divider()
+            SoftHeader {
+                CircleButton(systemImage: "chevron.left") { dismiss() }
+            } title: {
+                VStack(spacing: 2) {
+                    Text(counterpart?.name ?? "Chat")
+                        .font(.softScreenTitle).tracking(-0.24)
+                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Circle()
+                            .fill(counterpart?.isVerified == true ? Color.softGreen : Color.softMuted)
+                            .frame(width: 7, height: 7)
+                        Text(subtitle).font(.soft(13)).foregroundStyle(Color.softSecondary)
+                    }
+                }
+                .padding(.horizontal, 60)
+            } trailing: {
+                if let listing = conversation.listing {
+                    NavigationLink(value: listing.id) {
+                        ZStack {
+                            Circle().fill(Color.white.opacity(0.75))
+                            Image(systemName: "house").font(.system(size: 20, weight: .regular)).foregroundStyle(Color.softTextSoft)
+                        }
+                        .frame(width: 48, height: 48)
+                        .softShadow(.circle)
+                    }
+                    .buttonStyle(SoftPressStyle())
+                }
             }
 
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 8) {
-                        if loading { ProgressView().padding() }
-                        ForEach(messages) { message in
-                            MessageBubble(
-                                message: message,
-                                isMine: message.senderId == appState.currentUser?.id
-                            )
-                            .id(message.id)
+                    LazyVStack(spacing: 14) {
+                        if let listing = conversation.listing {
+                            ListingFactsCard(listing: listing)
+                        }
+                        if loading { ProgressView().tint(Color.softInk).padding() }
+                        ForEach(Array(messages.enumerated()), id: \.element.id) { index, message in
+                            let mine = message.senderId == appState.currentUser?.id
+                            let previousMine = index > 0 ? messages[index - 1].senderId == appState.currentUser?.id : true
+                            MessageBubble(message: message, isMine: mine,
+                                          showAvatar: !mine && previousMine,
+                                          name: counterpart?.name ?? "")
+                                .id(message.id)
                         }
                     }
-                    .padding(12)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 24)
+                    .padding(.bottom, 24)
                 }
+                .scrollDismissesKeyboard(.interactively)
                 .onChange(of: messages.count) {
                     if let last = messages.last {
                         withAnimation { proxy.scrollTo(last.id, anchor: .bottom) }
@@ -133,67 +178,66 @@ struct ChatView: View {
                 }
             }
 
-            if let errorMessage {
-                Text(errorMessage).font(.caption).foregroundStyle(.red).padding(.horizontal)
-            }
-
+            SoftError(message: errorMessage).padding(.horizontal, 20)
             composer
         }
-        .navigationTitle(conversation.counterparty?.name ?? "Chat")
-        .navigationBarTitleDisplayMode(.inline)
+        .softScreen()
+        .hidesSoftTabBar()
+        .navigationDestination(for: String.self) { id in
+            ListingDetailView(listingId: id)
+        }
         .task { await load() }
     }
 
-    private func listingHeader(_ listing: Listing) -> some View {
-        NavigationLink { ListingDetailView(listingId: listing.id) } label: {
-            HStack(spacing: 10) {
-                RemoteImage(url: listing.images.first?.url)
-                    .frame(width: 40, height: 40)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(listing.title).font(.footnote.weight(.medium)).lineLimit(1)
-                    Text(Format.price(listing.price, listingType: listing.listingType))
-                        .font(.caption).foregroundStyle(Color.cabinForest)
-                }
-                Spacer()
-                VerificationBadge(status: listing.verificationStatus, compact: true)
-                Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 12).padding(.vertical, 8)
-        }
-        .buttonStyle(.plain)
+    private var subtitle: String {
+        var parts: [String] = []
+        parts.append(counterpart?.isVerified == true ? "Verified" : "Unverified")
+        parts.append(counterpart?.isAgent == true ? "agent" : "account")
+        return parts.joined(separator: " ")
     }
 
     private var composer: some View {
-        VStack(spacing: 6) {
+        VStack(spacing: 8) {
             // A standing reminder, because upfront-payment requests were the
             // most common scam pattern respondents described.
-            Label("Never send a deposit before viewing the property in person.",
-                  systemImage: "exclamationmark.shield")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
+            Text("Never send a deposit before viewing the property in person.")
+                .font(.soft(12)).foregroundStyle(Color.softSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 8)
 
-            HStack(spacing: 8) {
-                TextField("Message…", text: $draft, axis: .vertical)
-                    .lineLimit(1...4)
-                    .textFieldStyle(.roundedBorder)
-                Button {
+            HStack(spacing: 10) {
+                HStack(spacing: 12) {
+                    TextField("", text: $draft, prompt: Text("Write a message").font(.soft(17)).foregroundStyle(Color.softMuted), axis: .vertical)
+                        .font(.soft(17))
+                        .lineLimit(1...4)
+                        .onSubmit { Task { await send() } }
+                }
+                .padding(.horizontal, 20)
+                .frame(minHeight: 60)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: 34, style: .continuous))
+                .softShadow(.tab)
+
+                CircleButton(systemImage: "paperplane", size: 56, inverted: true) {
                     Task { await send() }
-                } label: {
-                    Image(systemName: "arrow.up.circle.fill").font(.title2)
                 }
                 .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || sending)
+                .opacity(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.6 : 1)
             }
         }
-        .padding(12)
-        .background(.bar)
+        .padding(.horizontal, 20)
+        .padding(.bottom, 12)
     }
 
     private func load() async {
         loading = true
         do {
             messages = try await appState.api.messages(conversationId: conversation.id).messages
+            // A thread opened from "Message" arrives as bare ids; the list
+            // endpoint carries the listing and counterparty the header needs.
+            if conversation.listing == nil || conversation.counterparty == nil,
+               let full = try? await appState.api.conversations().conversations.first(where: { $0.id == conversation.id }) {
+                conversation = full
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
@@ -218,23 +262,68 @@ struct ChatView: View {
     }
 }
 
+/// The "here is how it checks out" card at the top of a thread: trust score and
+/// how recently the owner confirmed the listing.
+struct ListingFactsCard: View {
+    let listing: Listing
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                SoftPhoto(url: listing.images.first?.url, radius: 12)
+                    .frame(width: 44, height: 44)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(listing.title).font(.soft(16, .regular)).lineLimit(1)
+                    Text(Format.price(listing.price, listingType: listing.listingType))
+                        .font(.soft(14)).foregroundStyle(Color.softSecondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 6).padding(.top, 4)
+            HStack(spacing: 10) {
+                SoftTile(systemImage: "checkmark.shield", label: "Trust score", value: "\(listing.verificationScore)", compact: true)
+                SoftTile(systemImage: "calendar", label: "Confirmed", value: confirmedAgo, compact: true)
+            }
+        }
+        .padding(10)
+        .background(Color.white, in: RoundedRectangle(cornerRadius: SoftRadius.bubble, style: .continuous))
+        .softShadow(.row)
+    }
+
+    private var confirmedAgo: String {
+        guard let date = Format.date(from: listing.lastConfirmedAt ?? "") ?? Format.date(from: listing.createdAt) else { return "—" }
+        let days = max(0, Calendar.current.dateComponents([.day], from: date, to: Date()).day ?? 0)
+        if days == 0 { return "today" }
+        if days < 30 { return "\(days)d" }
+        return "\(days / 30)mo"
+    }
+}
+
 struct MessageBubble: View {
     let message: Message
     let isMine: Bool
+    var showAvatar: Bool = false
+    var name: String = ""
 
     var body: some View {
-        HStack {
-            if isMine { Spacer(minLength: 40) }
-            VStack(alignment: isMine ? .trailing : .leading, spacing: 2) {
-                Text(message.body)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
-                    .background(isMine ? Color.cabinForest : Color(.secondarySystemBackground),
-                                in: RoundedRectangle(cornerRadius: 14))
-                    .foregroundStyle(isMine ? .white : .primary)
-                Text(Format.relative(message.createdAt))
-                    .font(.caption2).foregroundStyle(.tertiary)
+        HStack(alignment: .top, spacing: 10) {
+            if isMine {
+                Spacer(minLength: 50)
+            } else if showAvatar {
+                SoftAvatar(name: name, size: 40)
+            } else {
+                Color.clear.frame(width: 40, height: 1)
             }
-            if !isMine { Spacer(minLength: 40) }
+            Text(message.body)
+                .font(.soft(16))
+                .foregroundStyle(Color.softText)
+                .padding(.horizontal, 18).padding(.vertical, 14)
+                .background(Color.white, in: RoundedRectangle(cornerRadius: SoftRadius.bubble, style: .continuous))
+                .softShadow(.row)
+                .frame(maxWidth: 300, alignment: isMine ? .trailing : .leading)
+            if !isMine { Spacer(minLength: 0) }
         }
+        .frame(maxWidth: .infinity, alignment: isMine ? .trailing : .leading)
+        .accessibilityLabel("\(isMine ? "You" : name): \(message.body), \(Format.relative(message.createdAt))")
     }
 }

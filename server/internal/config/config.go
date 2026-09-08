@@ -25,6 +25,10 @@ type Config struct {
 	// typically the Web, iOS, and Android client IDs, since each platform's
 	// SDK issues tokens for a different audience. Empty disables Google sign-in.
 	GoogleClientIDs []string
+	// AppleClientIDs are the accepted audiences for Sign in with Apple identity
+	// tokens: the iOS app's bundle identifier, plus a Services ID if web or
+	// Android sign-in is added. Empty disables Apple sign-in.
+	AppleClientIDs []string
 
 	// AnthropicAPIKey enables Claude-backed listing verification. When empty the
 	// verifier falls back to a deterministic rule-based check, so the app still
@@ -58,6 +62,8 @@ func Load() *Config {
 
 		// Comma-separated list of accepted Google client IDs (Web, iOS, Android).
 		GoogleClientIDs: parseCSV(getEnv("GOOGLE_CLIENT_ID", "")),
+		// Comma-separated list of accepted Apple audiences (bundle ID, Services ID).
+		AppleClientIDs: parseCSV(getEnv("APPLE_CLIENT_ID", "")),
 
 		AnthropicAPIKey: getEnv("ANTHROPIC_API_KEY", ""),
 		VerifyModel:     getEnv("VERIFY_MODEL", "claude-opus-5"),

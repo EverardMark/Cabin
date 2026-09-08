@@ -801,7 +801,10 @@ func (s *ListingStore) imagesFor(ids []string) (map[string][]models.ListingImage
 func scanListing(sc rowScanner) (*models.Listing, error) {
 	var l models.Listing
 	var lat, lng sql.NullFloat64
-	var created, updated, verifiedAt, lastConfirmed, featuredUntil, flagsJSON string
+	var created, updated, verifiedAt, lastConfirmed, featuredUntil string
+	// MySQL stores these as nullable TEXT (SQLite defaults them to ''), so scan
+	// through NullString to tolerate rows that were never reviewed.
+	var summary, flagsJSON sql.NullString
 	var ownerName, ownerEmail, ownerRole, ownerVerification string
 	var ownerRating float64
 	var ownerRatingCount int
@@ -810,7 +813,7 @@ func scanListing(sc rowScanner) (*models.Listing, error) {
 		&l.ID, &l.UserID, &l.Title, &l.Description, &l.Price, &l.Currency,
 		&l.PropertyType, &l.ListingType, &l.Bedrooms, &l.Bathrooms, &l.AreaSqft,
 		&l.Address, &l.City, &l.State, &l.ZipCode, &lat, &lng, &l.Status,
-		&l.VerificationStatus, &l.VerificationScore, &l.VerificationSummary, &flagsJSON,
+		&l.VerificationStatus, &l.VerificationScore, &summary, &flagsJSON,
 		&l.VerificationModel, &verifiedAt, &lastConfirmed, &featuredUntil,
 		&l.ReportCount, &l.ViewCount,
 		&created, &updated,
@@ -837,9 +840,10 @@ func scanListing(sc rowScanner) (*models.Listing, error) {
 	l.LastConfirmedAt = parseOptionalTime(lastConfirmed)
 	l.FeaturedUntil = parseOptionalTime(featuredUntil)
 
+	l.VerificationSummary = summary.String
 	l.VerificationFlags = []string{}
-	if flagsJSON != "" {
-		_ = json.Unmarshal([]byte(flagsJSON), &l.VerificationFlags)
+	if flagsJSON.String != "" {
+		_ = json.Unmarshal([]byte(flagsJSON.String), &l.VerificationFlags)
 		if l.VerificationFlags == nil {
 			l.VerificationFlags = []string{}
 		}

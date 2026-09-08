@@ -18,6 +18,9 @@ data class ListingsUiState(
     val error: String? = null,
     val filters: ListingFilters = ListingFilters(),
     val savedMessage: String? = null,
+    /** Set after "Message" on the hero card; the screen navigates then clears it. */
+    val openConversationId: String? = null,
+    val actionMessage: String? = null,
 )
 
 class ListingsViewModel : ViewModel() {
@@ -64,6 +67,32 @@ class ListingsViewModel : ViewModel() {
     }
 
     fun clearSavedMessage() = _state.update { it.copy(savedMessage = null) }
+
+    val currentUserId: String? get() = repo.user.value?.id
+
+    fun startConversation(listing: Listing) {
+        viewModelScope.launch {
+            repo.startConversation(listing.id).fold(
+                onSuccess = { c -> _state.update { it.copy(openConversationId = c.id) } },
+                onFailure = { e -> _state.update { it.copy(actionMessage = e.userMessage()) } },
+            )
+        }
+    }
+
+    fun conversationOpened() = _state.update { it.copy(openConversationId = null) }
+
+    fun requestViewing(listing: Listing, daysFromNow: Long, hour: Int, note: String) {
+        val at = java.time.LocalDate.now().plusDays(daysFromNow).atTime(hour, 0)
+            .atZone(java.time.ZoneId.systemDefault()).toInstant()
+        viewModelScope.launch {
+            repo.requestViewing(listing.id, at.toString(), note).fold(
+                onSuccess = { _state.update { it.copy(actionMessage = "Viewing requested — the poster has to accept it.") } },
+                onFailure = { e -> _state.update { it.copy(actionMessage = e.userMessage()) } },
+            )
+        }
+    }
+
+    fun clearActionMessage() = _state.update { it.copy(actionMessage = null) }
 
     /** A readable default name for a saved search, from the active filters. */
     fun defaultSearchName(): String {

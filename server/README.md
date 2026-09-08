@@ -38,6 +38,7 @@ auto-loaded — export them or use your process manager.
 | `DB_DRIVER` | `sqlite` | `sqlite` (zero setup) or `mysql` |
 | `DB_PATH` | `cabin.db` | SQLite file path (when `DB_DRIVER=sqlite`) |
 | `MYSQL_HOST`/`PORT`/`USER`/`PASSWORD`/`DATABASE` | `127.0.0.1`/`3306`/`cabin`/–/`cabin` | MySQL connection (when `DB_DRIVER=mysql`); or set a full `MYSQL_DSN` |
+| `APPLE_CLIENT_ID` | – | Accepted Sign in with Apple audiences (iOS bundle ID, Services ID). Empty disables `POST /auth/apple` |
 | `JWT_SECRET` | dev secret | **Required in production** (`openssl rand -hex 32`) |
 | `UPLOAD_DIR` | `uploads` | Where uploaded images are stored |
 | `ENV` | `development` | `production` disables the demo seed & requires `JWT_SECRET` |
@@ -78,6 +79,7 @@ Base path `/api/v1`. Send `Authorization: Bearer <token>` for authenticated rout
 | `POST` | `/auth/register` | | `{email, password, name, phone?, role?}` → `{token, user}` |
 | `POST` | `/auth/login` | | `{email, password}` → `{token, user}` |
 | `POST` | `/auth/google` | | `{id_token}` → `{token, user}`; 501 until `GOOGLE_CLIENT_ID` is set |
+| `POST` | `/auth/apple` | | `{identity_token, nonce, name?}` → `{token, user}`; the token's signature, issuer, audience, expiry and nonce are verified against Apple's JWKS; 501 until `APPLE_CLIENT_ID` is set |
 | `GET` | `/auth/me` | ✓ | Current user |
 | `PATCH` | `/me` | ✓ | Update name, phone, bio, licence, role |
 | `POST` | `/me/phone/send-code` | ✓ | `{phone?}` — texts a 6-digit code; rate limited |
@@ -254,3 +256,25 @@ storage/a CDN, serve behind TLS, and **add rate limiting to the auth endpoints**
 none today, so login is brute-forceable).
 
 Run the tests with `make test`.
+
+## Mock data
+
+With `SEED=true` (the development default) an empty database is loaded with a mock data set:
+five accounts, ten listings across the Muntinlupa / Laguna / Cavite corridor (one of them a
+deliberate scam that fails screening), plus chat threads, viewing requests in every state,
+reviews and saved searches, so each screen in the apps has something to show.
+
+| Account | Email | Who |
+|---|---|---|
+| Agent (the demo login) | `demo@cabin.app` | Maria Santos — licensed broker, posts most listings |
+| Owner | `owner@cabin.app` | Ramon Dela Cruz — private owner |
+| Buyer | `buyer@cabin.app` | Jonas Reyes — has pending, confirmed and completed viewings |
+| Buyer | `ana@cabin.app` | Ana Villanueva — unverified, one pending request |
+| Moderator | `admin@cabin.app` | Cabin Trust & Safety |
+
+All share the password `password123`. To start over (stop the server first):
+
+```bash
+make reseed          # local: wipes cabin.db and reloads everything
+./bin/cabin -reseed  # any environment with SEED=true; refuses when SEED is off
+```

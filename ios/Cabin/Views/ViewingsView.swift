@@ -17,86 +17,51 @@ struct ViewingsView: View {
     }
 
     var body: some View {
-        Group {
-            if loading && viewings.isEmpty {
-                ProgressView()
-            } else if viewings.isEmpty {
-                ContentUnavailableView {
-                    Label("No viewings booked", systemImage: "calendar")
-                } description: {
-                    Text(errorMessage ?? "Request a viewing from any listing and it will show up here.")
-                }
-            } else {
-                List {
-                    if !upcoming.isEmpty {
-                        Section("Upcoming") {
-                            ForEach(upcoming) { row($0) }
+        VStack(spacing: 0) {
+            SoftHeader {
+                AppMark()
+            } title: {
+                Text("Viewings").font(.softScreenTitle)
+            } trailing: {
+                Color.clear.frame(width: 48, height: 48)
+            }
+
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 12) {
+                    if loading && viewings.isEmpty {
+                        ProgressView().tint(Color.softInk).frame(maxWidth: .infinity).padding(.top, 40)
+                    } else if viewings.isEmpty {
+                        SoftEmpty(systemImage: "calendar", title: "No viewings booked",
+                                  message: errorMessage ?? "Request a viewing from any listing and it will show up here.")
+                    } else {
+                        if !upcoming.isEmpty {
+                            sectionLabel("Upcoming")
+                            ForEach(upcoming) { ViewingRow(viewing: $0, onUpdate: update) }
                         }
-                    }
-                    if !past.isEmpty {
-                        Section("Past") {
-                            ForEach(past) { row($0) }
+                        if !past.isEmpty {
+                            sectionLabel("Past").padding(.top, 8)
+                            ForEach(past) { ViewingRow(viewing: $0, onUpdate: update) }
                         }
+                        Text("Viewings auto-complete 24 hours after their slot; a completed viewing unlocks leaving a review.")
+                            .font(.soft(13)).foregroundStyle(Color.softSecondary)
+                            .padding(.horizontal, 8).padding(.top, 16)
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 120)
             }
         }
-        .navigationTitle("Viewings")
+        .softScreen()
+        .navigationDestination(for: String.self) { id in
+            ListingDetailView(listingId: id)
+        }
         .task { await load() }
         .refreshable { await load() }
     }
 
-    @ViewBuilder
-    private func row(_ viewing: ViewingRequest) -> some View {
-        let isOwner = viewing.ownerId == appState.currentUser?.id
-
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                RemoteImage(url: viewing.listing?.images.first?.url)
-                    .frame(width: 48, height: 48)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(viewing.listing?.title ?? "Listing").font(.subheadline.weight(.semibold)).lineLimit(1)
-                    Text(Format.dateTime(viewing.scheduledFor)).font(.caption).foregroundStyle(.secondary)
-                    Text(isOwner
-                         ? "Requested by \(viewing.requester?.name ?? "a buyer")"
-                         : "With \(viewing.owner?.name ?? "the poster")")
-                        .font(.caption2).foregroundStyle(.tertiary)
-                }
-                Spacer()
-                StatusChip(status: viewing.status)
-            }
-
-            if !viewing.note.isEmpty {
-                Text("“\(viewing.note)”").font(.caption).foregroundStyle(.secondary)
-            }
-            if !viewing.responseNote.isEmpty {
-                Text("Reply: \(viewing.responseNote)").font(.caption).foregroundStyle(.secondary)
-            }
-
-            // The owner drives the lifecycle; either side can cancel.
-            HStack(spacing: 8) {
-                if isOwner && viewing.status == "requested" {
-                    actionButton("Accept", .cabinForest) { await update(viewing, status: "confirmed") }
-                    actionButton("Decline", .secondary) { await update(viewing, status: "declined") }
-                }
-                if isOwner && viewing.status == "confirmed" {
-                    actionButton("Mark completed", .cabinForest) { await update(viewing, status: "completed") }
-                }
-                if viewing.status == "requested" || viewing.status == "confirmed" {
-                    actionButton("Cancel", .red) { await update(viewing, status: "cancelled") }
-                }
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func actionButton(_ title: String, _ tint: Color, action: @escaping () async -> Void) -> some View {
-        Button(title) { Task { await action() } }
-            .font(.caption.weight(.semibold))
-            .buttonStyle(.bordered)
-            .tint(tint)
-            .controlSize(.small)
+    private func sectionLabel(_ text: String) -> some View {
+        Text(text).font(.softSmall).foregroundStyle(Color.softSecondary).padding(.horizontal, 8)
     }
 
     private func update(_ viewing: ViewingRequest, status: String) async {
@@ -121,34 +86,107 @@ struct ViewingsView: View {
     }
 }
 
-struct StatusChip: View {
-    let status: String
+/// Date tile, title, time · who, inline Accept / Decline for owners, status tag.
+struct ViewingRow: View {
+    let viewing: ViewingRequest
+    var onUpdate: (ViewingRequest, String) async -> Void
+
+    @Environment(AppState.self) private var appState
+
+    private var isOwner: Bool { viewing.ownerId == appState.currentUser?.id }
+    private var date: Date? { viewing.scheduledDate }
 
     var body: some View {
-        Text(label)
-            .font(.caption2.weight(.semibold))
-            .padding(.horizontal, 8).padding(.vertical, 3)
-            .background(tint.opacity(0.15), in: Capsule())
-            .foregroundStyle(tint)
-    }
+        SoftRow {
+            VStack(spacing: 2) {
+                Text(date.map { $0.formatted(.dateTime.day()) } ?? "—").font(.soft(24))
+                Text(date.map { $0.formatted(.dateTime.month(.abbreviated)) } ?? "").font(.soft(12)).foregroundStyle(Color.softSecondary)
+            }
+            .frame(width: 64, height: 64)
+            .background(Color.softTile, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-    private var label: String {
-        switch status {
-        case "requested": return "Pending"
-        case "confirmed": return "Confirmed"
-        case "declined":  return "Declined"
-        case "cancelled": return "Cancelled"
-        case "completed": return "Completed"
-        default:          return Format.capitalized(status)
+            VStack(alignment: .leading, spacing: 3) {
+                NavigationLink(value: viewing.listingId) {
+                    Text(viewing.listing?.title ?? "Listing")
+                        .font(.softBody)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                }
+                .buttonStyle(SoftPressStyle())
+                Text("\(timeText) · \(who)")
+                    .font(.soft(14)).foregroundStyle(Color.softSecondary)
+                    .lineLimit(2)
+                if !viewing.note.isEmpty {
+                    Text("“\(viewing.note)”").font(.soft(13)).foregroundStyle(Color.softSecondary).lineLimit(2)
+                }
+                if !viewing.responseNote.isEmpty {
+                    Text("Reply: \(viewing.responseNote)").font(.soft(13)).foregroundStyle(Color.softSecondary).lineLimit(2)
+                }
+                actions
+            }
+
+            Spacer(minLength: 4)
+
+            statusTag.padding(.trailing, 2)
         }
     }
 
-    private var tint: Color {
-        switch status {
-        case "confirmed": return .cabinForest
-        case "completed": return .cabinForest
-        case "declined", "cancelled": return .red
-        default: return .cabinClay
+    /// "10:00 AM" — the formatter's narrow no-break space has no glyph in Outfit, so swap it for a plain space.
+    private var timeText: String {
+        (date?.formatted(.dateTime.hour().minute()) ?? "").replacingOccurrences(of: "\u{202F}", with: " ")
+    }
+
+    private var who: String {
+        isOwner
+            ? "\(viewing.requester?.name ?? "A buyer") asked"
+            : "with \(viewing.owner?.name ?? "the poster")"
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        // The owner drives the lifecycle; either side can cancel.
+        if isOwner && viewing.status == "requested" {
+            HStack(spacing: 8) {
+                smallButton("Accept", primary: true) { await onUpdate(viewing, "confirmed") }
+                smallButton("Decline", primary: false) { await onUpdate(viewing, "declined") }
+            }
+            .padding(.top, 8)
+        } else if isOwner && viewing.status == "confirmed" {
+            HStack(spacing: 8) {
+                smallButton("Mark completed", primary: true) { await onUpdate(viewing, "completed") }
+                smallButton("Cancel", primary: false) { await onUpdate(viewing, "cancelled") }
+            }
+            .padding(.top, 8)
+        } else if viewing.status == "requested" || viewing.status == "confirmed" {
+            HStack(spacing: 8) {
+                smallButton("Cancel", primary: false) { await onUpdate(viewing, "cancelled") }
+            }
+            .padding(.top, 8)
+        }
+    }
+
+    private func smallButton(_ title: String, primary: Bool, action: @escaping () async -> Void) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            Text(title)
+                .font(.soft(13, .regular))
+                .foregroundStyle(primary ? .white : Color.softText)
+                .padding(.horizontal, 16).padding(.vertical, 9)
+                .background(primary ? Color.softInk : Color.softTile, in: Capsule())
+        }
+        .buttonStyle(SoftPressStyle())
+    }
+
+    @ViewBuilder
+    private var statusTag: some View {
+        switch viewing.status {
+        case "confirmed": VTag(text: "Confirmed")
+        case "completed": VTag(text: "Completed")
+        case "requested": OTag(text: "Pending")
+        case "declined":  OTag(text: "Declined")
+        case "cancelled": OTag(text: "Cancelled")
+        default:          OTag(text: Format.capitalized(viewing.status))
         }
     }
 }

@@ -1,64 +1,62 @@
 package com.cabin.app.ui.theme
 
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Typography
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.sp
 
-private val LightColors = lightColorScheme(
-    primary = Forest,
+/**
+ * Cabin Soft is a light design on a pale green-to-cream ground, so the Material
+ * scheme is light-only and maps the design tokens onto Material roles for the
+ * few stock components still in use (dialogs, text fields in the post form).
+ */
+private val SoftColors = lightColorScheme(
+    primary = SoftInk,
     onPrimary = Color.White,
-    primaryContainer = ForestContainer,
-    onPrimaryContainer = OnForestContainer,
-    secondary = Clay,
+    primaryContainer = SoftTile,
+    onPrimaryContainer = SoftText,
+    secondary = SoftTextSoft,
     onSecondary = Color.White,
-    secondaryContainer = ClayContainer,
-    background = SurfaceLight,
-    onBackground = Ink,
-    surface = SurfaceLight,
-    onSurface = Ink,
-    surfaceVariant = SurfaceDim,
-    outline = OutlineLight,
+    secondaryContainer = SoftPale,
+    onSecondaryContainer = SoftText,
+    tertiary = SoftClay,
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFF7E3D3),
+    background = SoftBackgroundMid,
+    onBackground = SoftText,
+    surface = Color.White,
+    onSurface = SoftText,
+    surfaceVariant = SoftTile,
+    onSurfaceVariant = SoftSecondary,
+    outline = SoftOutline,
+    outlineVariant = SoftDivider,
+    error = SoftRed,
+    onError = Color.White,
 )
 
-private val DarkColors = darkColorScheme(
-    primary = Color(0xFF6FDBA6),
-    onPrimary = Color(0xFF003823),
-    primaryContainer = ForestDark,
-    onPrimaryContainer = ForestContainer,
-    secondary = Color(0xFFFFB68C),
-    onSecondary = Color(0xFF522300),
-    background = SurfaceDark,
-    onBackground = Color(0xFFE1E3DD),
-    surface = SurfaceDark,
-    onSurface = Color(0xFFE1E3DD),
-    surfaceVariant = Color(0xFF414941),
-    outline = Color(0xFF8B938A),
-)
-
-private val CabinTypography = Typography(
-    headlineMedium = TextStyle(fontWeight = FontWeight.Bold, fontSize = 26.sp, lineHeight = 32.sp),
-    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 20.sp, lineHeight = 26.sp),
-    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 16.sp, lineHeight = 22.sp),
-    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp, lineHeight = 24.sp),
-    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 14.sp, lineHeight = 20.sp),
-    labelLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, lineHeight = 20.sp),
+private val SoftTypography = Typography(
+    displayLarge = SoftType.display,
+    headlineLarge = SoftType.title,
+    headlineMedium = SoftType.heading,
+    headlineSmall = SoftType.screenTitle,
+    titleLarge = SoftType.cardTitle,
+    titleMedium = SoftType.body,
+    titleSmall = soft(15, FontWeight.Normal),
+    bodyLarge = SoftType.bodyLight,
+    bodyMedium = SoftType.small,
+    bodySmall = SoftType.caption,
+    labelLarge = SoftType.button,
+    labelMedium = SoftType.footnote,
+    labelSmall = SoftType.tag,
 )
 
 @Composable
-fun CabinTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
-    content: @Composable () -> Unit,
-) {
+fun CabinTheme(content: @Composable () -> Unit) {
     MaterialTheme(
-        colorScheme = if (darkTheme) DarkColors else LightColors,
-        typography = CabinTypography,
+        colorScheme = SoftColors,
+        typography = SoftTypography,
         content = content,
     )
 }

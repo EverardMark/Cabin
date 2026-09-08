@@ -22,7 +22,7 @@ type rowScanner interface {
 }
 
 // userColumns is the shared SELECT list for users.
-const userColumns = `id, email, name, role, password_hash, google_id, phone, bio, license_no,
+const userColumns = `id, email, name, role, password_hash, google_id, apple_id, phone, bio, license_no,
 	email_verified, phone_verified, verification_status, verification_score, verification_notes,
 	verified_at, rating_avg, rating_count, created_at`
 
@@ -41,11 +41,11 @@ func (s *UserStore) Create(u *models.User) error {
 		u.VerificationStatus = models.VerificationUnverified
 	}
 	_, err := s.db.Exec(
-		`INSERT INTO users (id, email, name, role, password_hash, google_id, phone, bio, license_no,
+		`INSERT INTO users (id, email, name, role, password_hash, google_id, apple_id, phone, bio, license_no,
 			email_verified, phone_verified, verification_status, verification_score, verification_notes,
 			verified_at, rating_avg, rating_count, created_at)
-		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-		u.ID, u.Email, u.Name, u.Role, u.PasswordHash, u.GoogleID, u.Phone, u.Bio, u.LicenseNo,
+		 VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+		u.ID, u.Email, u.Name, u.Role, u.PasswordHash, u.GoogleID, u.AppleID, u.Phone, u.Bio, u.LicenseNo,
 		boolToInt(u.EmailVerified), boolToInt(u.PhoneVerified), u.VerificationStatus,
 		u.VerificationScore, u.VerificationNotes, formatOptionalTime(u.VerifiedAt),
 		u.RatingAvg, u.RatingCount, u.CreatedAt.UTC().Format(time.RFC3339),
@@ -80,6 +80,24 @@ func (s *UserStore) GetByGoogleID(googleID string) (*models.User, error) {
 // A Google sign-in also proves the email address.
 func (s *UserStore) SetGoogleID(id, googleID string) error {
 	res, err := s.db.Exec(`UPDATE users SET google_id = ?, email_verified = 1 WHERE id = ?`, googleID, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// GetByAppleID looks up a user by their linked Apple user id ("sub").
+func (s *UserStore) GetByAppleID(appleID string) (*models.User, error) {
+	return scanUser(s.db.QueryRow(`SELECT `+userColumns+` FROM users WHERE apple_id = ?`, appleID))
+}
+
+// SetAppleID links an Apple user id to an existing account. Apple asserts the
+// email (real or relay), so it counts as verified.
+func (s *UserStore) SetAppleID(id, appleID string) error {
+	res, err := s.db.Exec(`UPDATE users SET apple_id = ?, email_verified = 1 WHERE id = ?`, appleID, id)
 	if err != nil {
 		return err
 	}
@@ -160,7 +178,7 @@ func scanUser(sc rowScanner) (*models.User, error) {
 	var bio, notes sql.NullString
 
 	if err := sc.Scan(
-		&u.ID, &u.Email, &u.Name, &u.Role, &u.PasswordHash, &u.GoogleID, &u.Phone, &bio, &u.LicenseNo,
+		&u.ID, &u.Email, &u.Name, &u.Role, &u.PasswordHash, &u.GoogleID, &u.AppleID, &u.Phone, &bio, &u.LicenseNo,
 		&emailVerified, &phoneVerified, &u.VerificationStatus, &u.VerificationScore, &notes,
 		&verifiedAt, &u.RatingAvg, &u.RatingCount, &created,
 	); err != nil {

@@ -23,7 +23,7 @@ android {
         // Base URL of the Cabin API.
         // 10.0.2.2 is the Android emulator's alias for the host machine's localhost.
         // For a physical device, replace with your computer's LAN IP (e.g. http://192.168.1.20:8080/).
-        buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080/\"")
+        buildConfigField("String", "API_BASE_URL", "\"http://47.129.37.21:8080/\"")
 
         // Google "Web" OAuth client ID, used as the serverClientId for Sign in with Google.
         // Leave empty to keep Google sign-in disabled; paste your Web client ID to enable it.

@@ -4,49 +4,53 @@ struct RootView: View {
     @Environment(AppState.self) private var appState
 
     var body: some View {
-        if appState.isLoggedIn {
+        if appState.isLoggedIn && !appState.onboarding {
             MainTabView()
         } else {
-            AuthView()
+            AuthFlowView()
         }
     }
 }
 
+/// Five tabs behind one floating pill bar. Every tab keeps its own
+/// NavigationStack alive so switching back restores scroll position and any
+/// pushed screen.
 struct MainTabView: View {
     @Environment(AppState.self) private var appState
+    @State private var chrome = ChromeState()
 
     var body: some View {
-        TabView {
-            NavigationStack {
-                ListingsView()
+        @Bindable var chrome = chrome
+        ZStack(alignment: .bottom) {
+            ZStack {
+                tabContent(.home) { ListingsView() }
+                tabContent(.chat) { MessagesView() }
+                tabContent(.map) { MapSearchView() }
+                tabContent(.viewings) { ViewingsView() }
+                tabContent(.profile) { ProfileView() }
             }
-            .tabItem { Label("Browse", systemImage: "magnifyingglass") }
 
-            NavigationStack {
-                MessagesView()
+            if !chrome.isTabBarHidden {
+                SoftTabBar(selected: $chrome.selectedTab, badges: [
+                    .chat: appState.summary.unreadMessages,
+                    .viewings: appState.summary.pendingViewingRequests,
+                ])
+                .padding(.bottom, 8)
+                .ignoresSafeArea(.keyboard, edges: .bottom)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            .tabItem { Label("Messages", systemImage: "bubble.left.and.bubble.right") }
-            .badge(appState.summary.unreadMessages)
-
-            // Posting is open to everyone: owners are the largest group of
-            // posters in the survey, and no respondent wanted an agents-only
-            // marketplace.
-            NavigationStack {
-                CreateListingView()
-            }
-            .tabItem { Label("Post", systemImage: "plus.circle.fill") }
-
-            NavigationStack {
-                ViewingsView()
-            }
-            .tabItem { Label("Viewings", systemImage: "calendar") }
-            .badge(appState.summary.pendingViewingRequests)
-
-            NavigationStack {
-                ProfileView()
-            }
-            .tabItem { Label("Profile", systemImage: "person.crop.circle") }
         }
+        .animation(.easeOut(duration: 0.2), value: chrome.isTabBarHidden)
+        .environment(chrome)
+        .background(SoftBackground())
         .task { await appState.refreshSummary() }
+    }
+
+    private func tabContent<Content: View>(_ which: SoftTab, @ViewBuilder content: () -> Content) -> some View {
+        let active = chrome.selectedTab == which
+        return NavigationStack { content() }
+            .opacity(active ? 1 : 0)
+            .allowsHitTesting(active)
+            .accessibilityHidden(!active)
     }
 }

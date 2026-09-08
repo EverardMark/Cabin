@@ -4,73 +4,122 @@ struct ProfileView: View {
     @Environment(AppState.self) private var appState
 
     @State private var listings: [Listing] = []
+    @State private var savedSearches: [SavedSearch] = []
     @State private var loading = true
     @State private var errorMessage: String?
     @State private var showEditProfile = false
+    @State private var showPost = false
     @State private var verifying = false
     @State private var verificationMessage: String?
     @State private var showPhoneSheet = false
+    @State private var showLogoutConfirm = false
 
     private var user: User? { appState.currentUser }
+    private var activeListings: [Listing] { listings.filter { $0.status == "active" } }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                verificationCard
-                shortcuts
+        VStack(spacing: 0) {
+            SoftHeader {
+                AppMark()
+            } title: {
+                Text("Profile").font(.softScreenTitle)
+            } trailing: {
+                Menu {
+                    Button { showEditProfile = true } label: { Label("Edit profile", systemImage: "pencil") }
+                    Button { showPost = true } label: { Label("Post a listing", systemImage: "plus") }
+                    Divider()
+                    Button(role: .destructive) { showLogoutConfirm = true } label: {
+                        Label("Log out", systemImage: "rectangle.portrait.and.arrow.right")
+                    }
+                } label: {
+                    ZStack {
+                        Circle().fill(Color.white.opacity(0.75))
+                        Image(systemName: "gearshape").font(.system(size: 20, weight: .regular)).foregroundStyle(Color.softTextSoft)
+                    }
+                    .frame(width: 48, height: 48)
+                    .softShadow(.circle)
+                }
+            }
 
-                Text("My listings").font(.title3.bold()).padding(.top, 4)
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 14) {
+                    identityCard
 
-                if loading {
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 20)
-                } else if let errorMessage {
-                    Text(errorMessage).foregroundStyle(.red)
-                } else if listings.isEmpty {
-                    Text("You haven't posted anything yet. Tap Post to add your first listing — owners, agents and renters can all post.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    ForEach(listings) { listing in
-                        NavigationLink(value: listing.id) {
-                            VStack(alignment: .leading, spacing: 6) {
-                                ListingCard(listing: listing)
-                                // Owners must see why their own listing was held back.
-                                if listing.verificationStatus == .rejected || listing.verificationStatus == .flagged {
-                                    Label(listing.verificationSummary.isEmpty
-                                          ? listing.verificationStatus.label
-                                          : listing.verificationSummary,
-                                          systemImage: "exclamationmark.bubble")
-                                        .font(.caption)
-                                        .foregroundStyle(listing.verificationStatus.tint)
-                                }
+                    HStack(spacing: 12) {
+                        SoftTile(systemImage: "house", label: "Active listings", value: "\(activeListings.count)")
+                        SoftTile(systemImage: "calendar", label: "Requests to answer", value: "\(appState.summary.pendingViewingRequests)")
+                    }
+
+                    NavigationLink { SavedSearchesView() } label: {
+                        SoftRow {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Saved searches").font(.softBody)
+                                Text(savedSearches.first?.name ?? "Get alerted when new listings match")
+                                    .font(.soft(14)).foregroundStyle(Color.softSecondary).lineLimit(1)
+                            }
+                            .padding(.leading, 8)
+                            Spacer(minLength: 4)
+                            let newMatches = savedSearches.reduce(0) { $0 + $1.newMatches }
+                            if newMatches > 0 {
+                                VTag(text: "\(newMatches) new", systemImage: nil, tint: .softAccent)
+                            } else {
+                                chevron
                             }
                         }
-                        .buttonStyle(.plain)
+                    }
+                    .buttonStyle(SoftPressStyle())
+
+                    phoneRow
+
+                    if user?.verificationStatus != .verified {
+                        verificationRow
+                    }
+
+                    PrimaryButton(title: "Post a listing", systemImage: "plus", large: true) { showPost = true }
+                        .padding(.top, 4)
+
+                    Text("My listings")
+                        .font(.softSmall).foregroundStyle(Color.softSecondary)
+                        .padding(.horizontal, 8).padding(.top, 10)
+
+                    if loading {
+                        ProgressView().tint(Color.softInk).frame(maxWidth: .infinity).padding(.top, 20)
+                    } else if let errorMessage {
+                        SoftError(message: errorMessage)
+                    } else if listings.isEmpty {
+                        Text("You haven't posted anything yet. Owners, agents and renters can all post.")
+                            .font(.soft(15)).foregroundStyle(Color.softSecondary)
+                            .padding(.horizontal, 8)
+                    } else {
+                        ForEach(listings) { listing in
+                            NavigationLink(value: listing.id) {
+                                MyListingCard(listing: listing)
+                            }
+                            .buttonStyle(SoftPressStyle())
+                        }
                     }
                 }
-
-                Button(role: .destructive) {
-                    appState.logout()
-                } label: {
-                    Label("Log out", systemImage: "rectangle.portrait.and.arrow.right")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .padding(.top, 8)
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 120)
             }
-            .padding(16)
         }
-        .navigationTitle("Profile")
+        .softScreen()
         .navigationDestination(for: String.self) { id in
             ListingDetailView(listingId: id)
         }
         .sheet(isPresented: $showEditProfile) { EditProfileSheet() }
         .sheet(isPresented: $showPhoneSheet) { PhoneVerificationSheet() }
+        .sheet(isPresented: $showPost, onDismiss: { Task { await load() } }) {
+            NavigationStack { CreateListingView() }
+        }
         .alert("Verification", isPresented: .constant(verificationMessage != nil)) {
             Button("OK") { verificationMessage = nil }
         } message: {
             Text(verificationMessage ?? "")
+        }
+        .confirmationDialog("Log out of Cabin?", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
+            Button("Log out", role: .destructive) { appState.logout() }
         }
         .task {
             await load()
@@ -79,108 +128,106 @@ struct ProfileView: View {
         .refreshable { await load() }
     }
 
-    private var header: some View {
-        HStack(spacing: 14) {
-            ZStack {
-                Circle().fill(Color.cabinForest).frame(width: 56, height: 56)
-                Text(user?.name.first.map { String($0).uppercased() } ?? "?")
-                    .font(.title3.bold())
-                    .foregroundStyle(.white)
-            }
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(user?.name ?? "—").font(.title3.weight(.semibold))
-                    if user?.isAgent == true { AgentBadge() }
+    // MARK: - Pieces
+
+    private var identityCard: some View {
+        SoftCard {
+            HStack(spacing: 16) {
+                SoftAvatar(name: user?.name ?? "?", size: 72)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(user?.name ?? "—").font(.softScreenTitle).lineLimit(1)
+                    Text(subtitle).font(.softSmall).foregroundStyle(Color.softSecondary).lineLimit(1)
+                    HStack(spacing: 6) {
+                        if user?.isVerified == true {
+                            VTag(text: "Account verified")
+                        } else {
+                            OTag(text: user?.verificationStatus == .pending ? "Under review" : "Not verified")
+                        }
+                        if let u = user, u.ratingCount > 0 {
+                            OTag(text: String(format: "★ %.1f · %d", u.ratingAvg, u.ratingCount))
+                        }
+                    }
+                    .padding(.top, 4)
                 }
-                Text(user?.email ?? "").font(.subheadline).foregroundStyle(.secondary)
-                RatingStars(rating: user?.ratingAvg ?? 0, count: user?.ratingCount ?? 0)
             }
-            Spacer()
-            Button("Edit") { showEditProfile = true }.font(.subheadline)
         }
     }
 
-    /// The account's own verification state, and the way to earn the badge.
-    @ViewBuilder
-    private var verificationCard: some View {
-        let status = user?.verificationStatus ?? .unverified
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Image(systemName: status.symbol).foregroundStyle(status.tint)
-                Text(status == .verified ? "Your account is verified" : "Get verified")
-                    .font(.subheadline.weight(.semibold))
-                Spacer()
-                VerificationBadge(status: status)
-            }
+    private var subtitle: String {
+        guard let user else { return "" }
+        if user.isAgent {
+            return user.licenseNo.isEmpty ? "Real estate agent" : "Licensed agent · \(user.licenseNo)"
+        }
+        return user.email
+    }
 
-            if let notes = user?.verificationNotes, !notes.isEmpty {
-                Text(notes).font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            } else {
-                Text("Verified accounts get a badge on every listing they post. 86% of people we surveyed said verification is what decides whether they trust a listing.")
-                    .font(.caption).foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            // A confirmed number is the prerequisite: the badge is meant to mean
-            // somebody is reachable, not that they typed a number in.
-            if user?.phoneVerified != true {
-                Label("Mobile number not confirmed", systemImage: "exclamationmark.circle")
-                    .font(.caption).foregroundStyle(Color.cabinClay)
-                Button {
-                    showPhoneSheet = true
-                } label: {
-                    Text("Confirm my number").frame(maxWidth: .infinity)
+    /// A confirmed number is the prerequisite for the badge: it is meant to mean
+    /// somebody is reachable, not that they typed a number in.
+    private var phoneRow: some View {
+        Button { showPhoneSheet = true } label: {
+            SoftRow {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Mobile number").font(.softBody)
+                    Text(phoneSubtitle)
+                        .font(.soft(14))
+                        .foregroundStyle(user?.phoneVerified == true ? Color.softSecondary : Color.softClay)
+                        .lineLimit(1)
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
-            } else if status != .verified {
+                .padding(.leading, 8)
+                Spacer(minLength: 4)
+                chevron
+            }
+        }
+        .buttonStyle(SoftPressStyle())
+    }
+
+    private var phoneSubtitle: String {
+        guard let user else { return "" }
+        if user.phoneVerified {
+            return "\(AuthFlowView.masked(user.phone)) · confirmed by SMS"
+        }
+        return user.phone.isEmpty ? "Add and confirm your number" : "\(user.phone) · not confirmed yet"
+    }
+
+    private var verificationRow: some View {
+        SoftRow {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Identity verification").font(.softBody)
+                Text(user?.verificationNotes.isEmpty == false
+                     ? user!.verificationNotes
+                     : (user?.phoneVerified == true
+                        ? (user?.isAgent == true ? "Needs your PRC licence number and a short review." : "A short automated review of your account.")
+                        : "Confirm your mobile number first."))
+                    .font(.soft(14)).foregroundStyle(Color.softSecondary)
+                    .lineLimit(2)
+            }
+            .padding(.leading, 8)
+            Spacer(minLength: 4)
+            if user?.phoneVerified == true && user?.verificationStatus != .pending {
                 Button {
                     Task { await requestVerification() }
                 } label: {
-                    if verifying {
-                        ProgressView().frame(maxWidth: .infinity)
-                    } else {
-                        Text("Request verification").frame(maxWidth: .infinity)
+                    Group {
+                        if verifying { ProgressView().tint(.white) } else { Text("Request") }
                     }
+                    .font(.soft(13, .regular))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 16).padding(.vertical, 9)
+                    .background(Color.softInk, in: Capsule())
                 }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.regular)
+                .buttonStyle(SoftPressStyle())
                 .disabled(verifying)
-            }
-
-            if user?.phoneVerified == true {
-                Label("Mobile number confirmed", systemImage: "checkmark.circle.fill")
-                    .font(.caption).foregroundStyle(Color.cabinForest)
+            } else {
+                OTag(text: user?.verificationStatus == .pending ? "Reviewing" : "Optional")
             }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(status.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 14))
     }
 
-    private var shortcuts: some View {
-        VStack(spacing: 0) {
-            NavigationLink { SavedSearchesView() } label: {
-                Label("Saved searches", systemImage: "bell.badge")
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.vertical, 12)
-            }
-            Divider()
-            NavigationLink { ViewingsView() } label: {
-                HStack {
-                    Label("My viewings", systemImage: "calendar")
-                    Spacer()
-                    if appState.summary.pendingViewingRequests > 0 {
-                        Text("\(appState.summary.pendingViewingRequests) to answer")
-                            .font(.caption).foregroundStyle(Color.cabinClay)
-                    }
-                }
-                .padding(.vertical, 12)
-            }
-        }
-        .padding(.horizontal, 14)
-        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14))
+    private var chevron: some View {
+        Image(systemName: "chevron.right")
+            .font(.system(size: 14, weight: .light))
+            .foregroundStyle(Color.softMuted)
+            .padding(.trailing, 4)
     }
 
     private func requestVerification() async {
@@ -199,10 +246,47 @@ struct ProfileView: View {
         errorMessage = nil
         do {
             listings = try await appState.api.myListings().listings
+            savedSearches = (try? await appState.api.savedSearches().searches) ?? []
         } catch {
             errorMessage = error.localizedDescription
         }
         loading = false
+    }
+}
+
+/// The owner's own listing: compact card plus the screening verdict when
+/// something needs fixing — owners must see why a listing was held back.
+struct MyListingCard: View {
+    let listing: Listing
+
+    var body: some View {
+        SoftCard(padding: 12) {
+            VStack(alignment: .leading, spacing: 0) {
+                SoftPhoto(url: listing.images.first?.url)
+                    .frame(height: 160)
+                    .frame(maxWidth: .infinity)
+                    .overlay(alignment: .topLeading) { PhotoTags(listing: listing).padding(12) }
+
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(listing.title).font(.soft(18)).lineLimit(1)
+                    Spacer(minLength: 0)
+                    PriceText(price: listing.price, listingType: listing.listingType, size: 16)
+                }
+                .padding(.horizontal, 8).padding(.top, 12)
+
+                if listing.verificationStatus == .flagged || listing.verificationStatus == .rejected {
+                    Text(listing.verificationSummary.isEmpty ? listing.verificationStatus.label : listing.verificationSummary)
+                        .font(.soft(14)).foregroundStyle(Color.softClay)
+                        .lineLimit(3)
+                        .padding(.horizontal, 8).padding(.top, 4)
+                } else if listing.isStale {
+                    Text("Not confirmed recently — open it and tap “still available”.")
+                        .font(.soft(14)).foregroundStyle(Color.softClay)
+                        .padding(.horizontal, 8).padding(.top, 4)
+                }
+                Color.clear.frame(height: 4)
+            }
+        }
     }
 }
 

@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS users (
     role                VARCHAR(20)  NOT NULL DEFAULT 'user',
     password_hash       VARCHAR(255) NOT NULL,
     google_id           VARCHAR(255) NOT NULL DEFAULT '',
+    apple_id            VARCHAR(255) NOT NULL DEFAULT '',
     phone               VARCHAR(32)  NOT NULL DEFAULT '',
     bio                 TEXT         NULL,
     license_no          VARCHAR(64)  NOT NULL DEFAULT '',

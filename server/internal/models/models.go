@@ -48,6 +48,7 @@ type User struct {
 	LicenseNo    string `json:"license_no"`
 	PasswordHash string `json:"-"`
 	GoogleID     string `json:"-"`
+	AppleID      string `json:"-"`
 
 	EmailVerified      bool       `json:"email_verified"`
 	PhoneVerified      bool       `json:"phone_verified"`

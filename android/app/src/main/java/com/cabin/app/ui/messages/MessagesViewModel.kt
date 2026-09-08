@@ -65,8 +65,13 @@ class ChatViewModel(private val conversationId: String) : ViewModel() {
         viewModelScope.launch {
             repo.messages(conversationId).fold(
                 onSuccess = { res ->
+                    // The thread endpoint returns bare ids; the list endpoint carries the
+                    // listing and counterparty the header and facts card need.
+                    val enriched = res.conversation?.takeIf { it.listing != null && it.counterparty != null }
+                        ?: repo.conversations().getOrNull()?.firstOrNull { it.id == conversationId }
+                        ?: res.conversation
                     _state.update {
-                        it.copy(loading = false, conversation = res.conversation, messages = res.messages)
+                        it.copy(loading = false, conversation = enriched, messages = res.messages)
                     }
                 },
                 onFailure = { e -> _state.update { it.copy(loading = false, error = e.userMessage()) } },

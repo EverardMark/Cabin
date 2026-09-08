@@ -10,9 +10,9 @@ settings:
     MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
     SWIFT_VERSION: "5.0"
-    DEVELOPMENT_TEAM: ""
-    CODE_SIGNING_REQUIRED: "NO"
-    CODE_SIGNING_ALLOWED: "NO"
+    DEVELOPMENT_TEAM: "EXXHM39LKF"
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]: "NO"
 
 packages:
   GoogleSignIn:
@@ -30,15 +30,26 @@ targets:
         product: GoogleSignIn
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.cabin.app
+        PRODUCT_BUNDLE_IDENTIFIER: com.ueline.Cabin.demo
         TARGETED_DEVICE_FAMILY: "1,2"
         INFOPLIST_KEY_UILaunchScreen_Generation: "YES"
         GENERATE_INFOPLIST_FILE: "NO"
         INFOPLIST_FILE: Cabin/Info.plist
+    entitlements:
+      path: Cabin/Cabin.entitlements
+      properties:
+        # Sign in with Apple. Xcode registers the capability on the App ID
+        # automatically when signing with -allowProvisioningUpdates.
+        com.apple.developer.applesignin: [Default]
     info:
       path: Cabin/Info.plist
       properties:
         CFBundleDisplayName: Cabin
+        # Outfit (SIL OFL) — the typeface from the Cabin Soft design.
+        UIAppFonts:
+          - Outfit-Light.ttf
+          - Outfit-Regular.ttf
+          - Outfit-Medium.ttf
         # Google Sign-In: paste your iOS OAuth client ID below to activate.
         # Leaving it empty keeps Google sign-in dormant (the button shows
         # "isn't configured yet"). The URL scheme must be the REVERSED client ID
@@ -57,4 +68,4 @@ targets:
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
+          NSAllowsArbitraryLoads: true

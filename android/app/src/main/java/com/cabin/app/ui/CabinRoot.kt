@@ -1,19 +1,24 @@
 package com.cabin.app.ui
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.AddCircle
-import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
+import androidx.compose.material.icons.outlined.Description
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Person
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
+import androidx.compose.material.icons.outlined.Place
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -21,20 +26,29 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.cabin.app.data.ServiceLocator
-import com.cabin.app.ui.auth.AuthScreen
+import com.cabin.app.ui.auth.AuthFlowScreen
 import com.cabin.app.ui.common.FullScreenLoading
+import com.cabin.app.ui.common.SoftBackground
+import com.cabin.app.ui.common.softClick
+import com.cabin.app.ui.common.softShadowTab
 import com.cabin.app.ui.create.CreateListingScreen
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.cabin.app.ui.detail.ListingDetailScreen
 import com.cabin.app.ui.detail.ListingDetailViewModel
 import com.cabin.app.ui.listings.ListingsScreen
@@ -44,6 +58,9 @@ import com.cabin.app.ui.messages.ChatViewModel
 import com.cabin.app.ui.messages.MessagesScreen
 import com.cabin.app.ui.profile.ProfileScreen
 import com.cabin.app.ui.searches.SavedSearchesScreen
+import com.cabin.app.ui.theme.SoftAccent
+import com.cabin.app.ui.theme.SoftInk
+import com.cabin.app.ui.theme.SoftTextSoft
 import com.cabin.app.ui.userprofile.UserProfileScreen
 import com.cabin.app.ui.userprofile.UserProfileViewModel
 import com.cabin.app.ui.viewings.ViewingsScreen
@@ -51,11 +68,11 @@ import com.cabin.app.ui.viewings.ViewingsScreen
 object Routes {
     const val BROWSE = "browse"
     const val MESSAGES = "messages"
-    const val POST = "post"
+    const val MAP = "map"
     const val VIEWINGS = "viewings"
     const val PROFILE = "profile"
+    const val POST = "post"
     const val SEARCHES = "searches"
-    const val MAP = "map"
     const val DETAIL = "detail/{id}"
     const val CHAT = "chat/{id}"
     const val USER = "user/{id}"
@@ -78,19 +95,26 @@ fun CabinRoot() {
     }
 
     val user by repo.user.collectAsState()
+    val onboarding by repo.onboarding.collectAsState()
 
-    when {
-        !booted -> FullScreenLoading()
-        user == null -> AuthScreen()
-        else -> MainScaffold()
+    SoftBackground {
+        when {
+            !booted -> FullScreenLoading()
+            user == null || onboarding -> AuthFlowScreen()
+            else -> MainScaffold()
+        }
     }
 }
 
-private data class Tab(
-    val route: String,
-    val label: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
-    val badge: Int = 0,
+/** The five tabs of the floating pill bar (the design has no Post tab; posting lives in Profile). */
+private data class SoftTab(val route: String, val icon: ImageVector, val label: String)
+
+private val tabs = listOf(
+    SoftTab(Routes.BROWSE, Icons.Outlined.Home, "Browse"),
+    SoftTab(Routes.MESSAGES, Icons.Outlined.ChatBubbleOutline, "Messages"),
+    SoftTab(Routes.MAP, Icons.Outlined.Place, "Map"),
+    SoftTab(Routes.VIEWINGS, Icons.Outlined.Description, "Viewings"),
+    SoftTab(Routes.PROFILE, Icons.Outlined.Person, "Profile"),
 )
 
 @Composable
@@ -98,126 +122,170 @@ private fun MainScaffold() {
     val navController = rememberNavController()
     val summary by ServiceLocator.repository.summary.collectAsState()
 
-    // Posting is open to everyone: owners are the largest group of posters in
-    // the survey, and no respondent wanted an agents-only marketplace.
-    val tabs = listOf(
-        Tab(Routes.BROWSE, "Browse", Icons.Outlined.Search),
-        Tab(Routes.MESSAGES, "Messages", Icons.Outlined.ChatBubbleOutline, summary.unreadMessages),
-        Tab(Routes.POST, "Post", Icons.Outlined.AddCircle),
-        Tab(Routes.VIEWINGS, "Viewings", Icons.Outlined.CalendarMonth, summary.pendingViewingRequests),
-        Tab(Routes.PROFILE, "Profile", Icons.Outlined.Person),
-    )
-
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
     val showBottomBar = currentRoute in tabs.map { it.route }
 
     LaunchedEffect(Unit) { ServiceLocator.repository.refreshSummary() }
 
-    Scaffold(
-        bottomBar = {
-            if (showBottomBar) {
-                NavigationBar {
-                    tabs.forEach { tab ->
-                        NavigationBarItem(
-                            selected = currentRoute == tab.route,
-                            onClick = {
-                                if (currentRoute != tab.route) {
-                                    navController.navigate(tab.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) {
-                                            saveState = true
-                                        }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                }
-                            },
-                            icon = {
-                                BadgedBox(badge = {
-                                    if (tab.badge > 0) Badge { Text(tab.badge.toString()) }
-                                }) {
-                                    Icon(tab.icon, contentDescription = tab.label)
-                                }
-                            },
-                            label = { Text(tab.label) },
-                        )
-                    }
+    fun switchTab(route: String) {
+        if (currentRoute == route) return
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        CabinNavHost(navController, onSwitchTab = ::switchTab)
+
+        if (showBottomBar) {
+            SoftTabBar(
+                selected = currentRoute,
+                badges = mapOf(
+                    Routes.MESSAGES to summary.unreadMessages,
+                    Routes.VIEWINGS to summary.pendingViewingRequests,
+                ),
+                onSelect = ::switchTab,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 8.dp),
+            )
+        }
+    }
+}
+
+/** The floating white pill with five circular tabs (.tab). */
+@Composable
+private fun SoftTabBar(
+    selected: String?,
+    badges: Map<String, Int>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+        modifier = modifier
+            .width(334.dp)
+            .height(68.dp)
+            .softShadowTab(CircleShape)
+            .clip(CircleShape)
+            .background(Color.White)
+            .padding(horizontal = 18.dp),
+    ) {
+        tabs.forEach { tab ->
+            val on = tab.route == selected
+            Box(modifier = Modifier.size(54.dp)) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(if (on) SoftInk else Color.Transparent)
+                        .softClick { onSelect(tab.route) },
+                ) {
+                    Icon(
+                        tab.icon,
+                        contentDescription = tab.label,
+                        tint = if (on) Color.White else SoftTextSoft,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+                if ((badges[tab.route] ?: 0) > 0) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .offset(x = (-12).dp, y = 12.dp)
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(SoftAccent),
+                    )
                 }
             }
-        },
-    ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = Routes.BROWSE,
-            modifier = Modifier.padding(padding),
-        ) {
-            composable(Routes.BROWSE) {
-                ListingsScreen(
-                    onOpenListing = { id -> navController.navigate(Routes.detail(id)) },
-                    onOpenMap = { navController.navigate(Routes.MAP) },
-                )
-            }
-            composable(Routes.MAP) {
-                MapSearchScreen(onOpenListing = { id -> navController.navigate(Routes.detail(id)) })
-            }
-            composable(Routes.MESSAGES) {
-                MessagesScreen(onOpenConversation = { id -> navController.navigate(Routes.chat(id)) })
-            }
-            composable(Routes.POST) {
-                CreateListingScreen(
-                    onCreated = { id ->
-                        navController.navigate(Routes.detail(id)) {
-                            popUpTo(Routes.BROWSE)
-                        }
-                    },
-                )
-            }
-            composable(Routes.VIEWINGS) {
-                ViewingsScreen(onOpenListing = { id -> navController.navigate(Routes.detail(id)) })
-            }
-            composable(Routes.PROFILE) {
-                ProfileScreen(
-                    onOpenListing = { id -> navController.navigate(Routes.detail(id)) },
-                    onOpenSavedSearches = { navController.navigate(Routes.SEARCHES) },
-                    onOpenViewings = { navController.navigate(Routes.VIEWINGS) },
-                )
-            }
-            composable(Routes.SEARCHES) {
-                SavedSearchesScreen(onOpenListing = { id -> navController.navigate(Routes.detail(id)) })
-            }
-            composable(Routes.DETAIL) { entry ->
-                ListingDetailScreen(
-                    listingId = entry.arguments?.getString("id").orEmpty(),
-                    onBack = { navController.popBackStack() },
-                    onOpenConversation = { id -> navController.navigate(Routes.chat(id)) },
-                    onOpenProfile = { id -> navController.navigate(Routes.user(id)) },
-                    onEdit = { id -> navController.navigate(Routes.edit(id)) },
-                )
-            }
-            composable(Routes.CHAT) { entry ->
-                val id = entry.arguments?.getString("id").orEmpty()
-                ChatScreen(
-                    conversationId = id,
-                    onOpenListing = { listingId -> navController.navigate(Routes.detail(listingId)) },
-                    viewModel = viewModel(factory = factoryFor { ChatViewModel(id) }),
-                )
-            }
-            composable(Routes.EDIT) { entry ->
-                EditListingRoute(
-                    listingId = entry.arguments?.getString("id").orEmpty(),
-                    onSaved = { navController.popBackStack() },
-                    onDeleted = {
-                        // The listing is gone, so don't return to its detail screen.
-                        navController.popBackStack(Routes.BROWSE, inclusive = false)
-                    },
-                )
-            }
-            composable(Routes.USER) { entry ->
-                val id = entry.arguments?.getString("id").orEmpty()
-                UserProfileScreen(
-                    viewModel = viewModel(factory = factoryFor { UserProfileViewModel(id) }),
-                )
-            }
+        }
+    }
+}
+
+@Composable
+private fun CabinNavHost(navController: NavHostController, onSwitchTab: (String) -> Unit) {
+    NavHost(
+        navController = navController,
+        startDestination = Routes.BROWSE,
+        modifier = Modifier.fillMaxSize(),
+    ) {
+        composable(Routes.BROWSE) {
+            ListingsScreen(
+                onOpenListing = { id -> navController.navigate(Routes.detail(id)) },
+                onOpenConversation = { id -> navController.navigate(Routes.chat(id)) },
+                onOpenMessages = { onSwitchTab(Routes.MESSAGES) },
+            )
+        }
+        composable(Routes.MAP) {
+            MapSearchScreen(onOpenListing = { id -> navController.navigate(Routes.detail(id)) })
+        }
+        composable(Routes.MESSAGES) {
+            MessagesScreen(onOpenConversation = { id -> navController.navigate(Routes.chat(id)) })
+        }
+        composable(Routes.POST) {
+            CreateListingScreen(
+                onCreated = { id ->
+                    navController.navigate(Routes.detail(id)) { popUpTo(Routes.PROFILE) }
+                },
+            )
+        }
+        composable(Routes.VIEWINGS) {
+            ViewingsScreen(onOpenListing = { id -> navController.navigate(Routes.detail(id)) })
+        }
+        composable(Routes.PROFILE) {
+            ProfileScreen(
+                onOpenListing = { id -> navController.navigate(Routes.detail(id)) },
+                onOpenSavedSearches = { navController.navigate(Routes.SEARCHES) },
+                onOpenPost = { navController.navigate(Routes.POST) },
+            )
+        }
+        composable(Routes.SEARCHES) {
+            SavedSearchesScreen(
+                onOpenListing = { id -> navController.navigate(Routes.detail(id)) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.DETAIL) { entry ->
+            ListingDetailScreen(
+                listingId = entry.arguments?.getString("id").orEmpty(),
+                onBack = { navController.popBackStack() },
+                onOpenConversation = { id -> navController.navigate(Routes.chat(id)) },
+                onOpenProfile = { id -> navController.navigate(Routes.user(id)) },
+                onEdit = { id -> navController.navigate(Routes.edit(id)) },
+            )
+        }
+        composable(Routes.CHAT) { entry ->
+            val id = entry.arguments?.getString("id").orEmpty()
+            ChatScreen(
+                conversationId = id,
+                onBack = { navController.popBackStack() },
+                onOpenListing = { listingId -> navController.navigate(Routes.detail(listingId)) },
+                viewModel = viewModel(factory = factoryFor { ChatViewModel(id) }),
+            )
+        }
+        composable(Routes.EDIT) { entry ->
+            EditListingRoute(
+                listingId = entry.arguments?.getString("id").orEmpty(),
+                onSaved = { navController.popBackStack() },
+                onDeleted = {
+                    // The listing is gone, so don't return to its detail screen.
+                    navController.popBackStack(Routes.BROWSE, inclusive = false)
+                },
+            )
+        }
+        composable(Routes.USER) { entry ->
+            val id = entry.arguments?.getString("id").orEmpty()
+            UserProfileScreen(
+                onBack = { navController.popBackStack() },
+                viewModel = viewModel(factory = factoryFor { UserProfileViewModel(id) }),
+            )
         }
     }
 }

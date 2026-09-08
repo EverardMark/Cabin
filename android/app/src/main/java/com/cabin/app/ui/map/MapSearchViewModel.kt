@@ -39,5 +39,10 @@ class MapSearchViewModel : ViewModel() {
 
     fun select(listing: Listing) = _state.update { it.copy(selected = listing) }
 
+    fun setQuery(query: String) = _state.update { it.copy(filters = it.filters.copy(query = query)) }
+    fun setVerifiedOnly(value: Boolean) = _state.update { it.copy(filters = it.filters.copy(verifiedOnly = value)) }
+    fun setExcludeStale(value: Boolean) = _state.update { it.copy(filters = it.filters.copy(excludeStale = value)) }
+    fun setListingType(value: String?) = _state.update { it.copy(filters = it.filters.copy(listingType = value)) }
+
     fun clearSelection() = _state.update { it.copy(selected = null) }
 }

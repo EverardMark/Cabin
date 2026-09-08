@@ -55,6 +55,12 @@ final class APIClient {
         return try await send("api/v1/auth/google", method: "POST", body: Body(idToken: idToken))
     }
 
+    func appleSignIn(identityToken: String, nonce: String, name: String) async throws -> AuthResponse {
+        struct Body: Encodable { let identityToken: String; let nonce: String; let name: String } // snake_case on the wire
+        return try await send("api/v1/auth/apple", method: "POST",
+                              body: Body(identityToken: identityToken, nonce: nonce, name: name))
+    }
+
     func login(_ body: LoginRequest) async throws -> AuthResponse {
         try await send("api/v1/auth/login", method: "POST", body: body)
     }

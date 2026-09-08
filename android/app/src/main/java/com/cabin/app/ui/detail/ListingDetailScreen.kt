@@ -6,12 +6,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
@@ -19,22 +20,29 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.outlined.Bathtub
+import androidx.compose.material.icons.outlined.Bed
+import androidx.compose.material.icons.outlined.Check
+import androidx.compose.material.icons.outlined.CropSquare
+import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.Place
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Sell
+import androidx.compose.material.icons.outlined.Star
+import androidx.compose.material.icons.outlined.VerifiedUser
+import androidx.compose.material.icons.outlined.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -46,19 +54,44 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import com.cabin.app.data.model.Listing
 import com.cabin.app.data.model.FeaturePlan
+import com.cabin.app.data.model.Listing
 import com.cabin.app.data.model.PriceComparison
+import com.cabin.app.data.model.UserSummary
 import com.cabin.app.data.model.Verification
-import com.cabin.app.ui.common.FullScreenLoading
-import com.cabin.app.ui.common.FullScreenMessage
+import com.cabin.app.ui.common.BookViewingDialog
+import com.cabin.app.ui.common.CircleButton
+import com.cabin.app.ui.common.MessageDialog
 import com.cabin.app.ui.common.NetworkImage
-import com.cabin.app.ui.common.Pill
-import com.cabin.app.ui.common.PosterCard
-import com.cabin.app.ui.common.PrimaryButton
-import com.cabin.app.ui.common.StaleWarning
-import com.cabin.app.ui.common.TrustPanel
+import com.cabin.app.ui.common.OTag
+import com.cabin.app.ui.common.SoftAvatarView
+import com.cabin.app.ui.common.SoftCard
+import com.cabin.app.ui.common.SoftChevron
+import com.cabin.app.ui.common.SoftEmpty
+import com.cabin.app.ui.common.SoftHeader
+import com.cabin.app.ui.common.SoftLink
+import com.cabin.app.ui.common.SoftLoading
+import com.cabin.app.ui.common.SoftPhotoPlaceholder
+import com.cabin.app.ui.common.SoftPrimaryButton
+import com.cabin.app.ui.common.SoftRadius
+import com.cabin.app.ui.common.SoftRow
+import com.cabin.app.ui.common.SoftSecondaryButton
+import com.cabin.app.ui.common.SoftTile
+import com.cabin.app.ui.common.VTag
+import com.cabin.app.ui.common.softClick
+import com.cabin.app.ui.listings.PhotoTags
+import com.cabin.app.ui.listings.metaLine
+import com.cabin.app.ui.theme.SoftClay
+import com.cabin.app.ui.theme.SoftInk
+import com.cabin.app.ui.theme.SoftRed
+import com.cabin.app.ui.theme.SoftSecondary
+import com.cabin.app.ui.theme.SoftText
+import com.cabin.app.ui.theme.SoftTextSoft
+import com.cabin.app.ui.theme.SoftTile
+import com.cabin.app.ui.theme.SoftType
+import com.cabin.app.ui.theme.soft
 import com.cabin.app.util.Format
+import kotlin.math.abs
 
 private val reportReasons = listOf(
     "fake_listing" to "Fake or doesn't exist",
@@ -94,30 +127,32 @@ fun ListingDetailScreen(
     var showReport by remember { mutableStateOf(false) }
     var showBooking by remember { mutableStateOf(false) }
     var showPromote by remember { mutableStateOf(false) }
+    val listing = state.listing
+    val isMine = listing != null && listing.userId == viewModel.currentUserId
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().navigationBarsPadding()) {
+        SoftHeader(
+            leading = { CircleButton(Icons.AutoMirrored.Outlined.KeyboardArrowLeft, "Back", onClick = onBack) },
+            trailing = {
+                if (listing != null) {
+                    if (isMine) CircleButton(Icons.Outlined.Edit, "Edit listing", onClick = { onEdit(listingId) })
+                    else CircleButton(Icons.Outlined.Flag, "Report listing", onClick = { showReport = true })
+                } else Spacer(Modifier.size(48.dp))
+            },
+        )
         when {
-            state.loading -> FullScreenLoading()
-            state.listing == null -> FullScreenMessage(
-                title = "Couldn't load listing",
-                message = state.error,
-                actionLabel = "Back",
-                onAction = onBack,
-            )
+            state.loading -> SoftLoading()
+            listing == null -> SoftEmpty(Icons.Outlined.Warning, "Couldn't load listing", state.error ?: "", actionLabel = "Back", onAction = onBack)
             else -> ListingDetailContent(
-                listing = state.listing!!,
+                listing = listing,
                 comparison = state.comparison,
-                isMine = state.listing!!.userId == viewModel.currentUserId,
+                isMine = isMine,
                 busy = state.busy,
-                onBack = onBack,
                 onMessage = viewModel::startConversation,
                 onBook = { showBooking = true },
                 onReport = { showReport = true },
                 onConfirm = viewModel::confirmAvailability,
-                onPromote = {
-                    viewModel.loadFeaturePlans()
-                    showPromote = true
-                },
+                onPromote = { viewModel.loadFeaturePlans(); showPromote = true },
                 onEdit = { onEdit(listingId) },
                 onOpenProfile = onOpenProfile,
             )
@@ -125,46 +160,19 @@ fun ListingDetailScreen(
     }
 
     if (showReport) {
-        ReportDialog(
-            onDismiss = { showReport = false },
-            onSubmit = { reason, details ->
-                viewModel.report(reason, details)
-                showReport = false
-            },
-        )
+        ReportDialog(onDismiss = { showReport = false }, onSubmit = { reason, details -> viewModel.report(reason, details); showReport = false })
     }
-
     if (showPromote) {
         PromoteDialog(
-            plans = state.featurePlans,
-            note = state.featureNote,
-            busy = state.busy,
+            plans = state.featurePlans, note = state.featureNote, busy = state.busy,
             onDismiss = { showPromote = false },
-            onSubmit = { planId ->
-                viewModel.featureListing(planId)
-                showPromote = false
-            },
+            onSubmit = { planId -> viewModel.featureListing(planId); showPromote = false },
         )
     }
-
     if (showBooking) {
-        BookViewingDialog(
-            onDismiss = { showBooking = false },
-            onSubmit = { days, hour, note ->
-                viewModel.requestViewing(days, hour, note)
-                showBooking = false
-            },
-        )
+        BookViewingDialog(onDismiss = { showBooking = false }, onSubmit = { days, hour, note -> viewModel.requestViewing(days, hour, note); showBooking = false })
     }
-
-    state.actionMessage?.let { message ->
-        AlertDialog(
-            onDismissRequest = viewModel::clearActionMessage,
-            title = { Text("Cabin") },
-            text = { Text(message) },
-            confirmButton = { TextButton(onClick = viewModel::clearActionMessage) { Text("OK") } },
-        )
-    }
+    state.actionMessage?.let { MessageDialog("Cabin", it, viewModel::clearActionMessage) }
 }
 
 @Composable
@@ -173,7 +181,6 @@ private fun ListingDetailContent(
     comparison: PriceComparison?,
     isMine: Boolean,
     busy: Boolean,
-    onBack: () -> Unit,
     onMessage: () -> Unit,
     onBook: () -> Unit,
     onReport: () -> Unit,
@@ -183,269 +190,249 @@ private fun ListingDetailContent(
     onOpenProfile: (String) -> Unit,
 ) {
     Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp)
+            .padding(top = 22.dp, bottom = 48.dp),
     ) {
-        Box {
-            if (listing.images.isNotEmpty()) {
-                val pagerState = rememberPagerState(pageCount = { listing.images.size })
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(4f / 3f),
-                ) { page ->
-                    NetworkImage(
-                        url = listing.images[page].url,
-                        contentDescription = listing.title,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-                if (listing.images.size > 1) {
-                    Pill(
-                        text = "${pagerState.currentPage + 1} / ${listing.images.size}",
-                        background = Color.Black.copy(alpha = 0.55f),
-                        contentColor = Color.White,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(12.dp),
-                    )
-                }
-            } else {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier.fillMaxWidth().aspectRatio(4f / 3f),
-                ) {
-                    NetworkImage(url = null, contentDescription = null, modifier = Modifier.fillMaxSize())
-                    Text(
-                        "No photos yet",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+        HeroCard(listing, isMine, busy, onMessage, onBook, onEdit, onPromote)
+        TrustCard(listing)
 
-            Surface(
-                shape = CircleShape,
-                color = Color.Black.copy(alpha = 0.45f),
-                modifier = Modifier
-                    .padding(12.dp)
-                    .size(40.dp)
-                    .clip(CircleShape),
-                onClick = onBack,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.White,
-                    )
-                }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            SoftTile(Icons.Outlined.Bed, "Bedrooms", Format.beds(listing.bedrooms), compact = true, modifier = Modifier.weight(1f))
+            SoftTile(Icons.Outlined.Bathtub, "Bathrooms", Format.baths(listing.bathrooms), compact = true, modifier = Modifier.weight(1f))
+            SoftTile(Icons.Outlined.CropSquare, "Area · sqft", if (listing.areaSqft > 0) "%,d".format(listing.areaSqft) else "—", compact = true, modifier = Modifier.weight(1f))
+        }
+
+        if (comparison != null && comparison.sampleSize >= 3) PriceComparisonCard(comparison)
+
+        if (listing.description.isNotBlank()) {
+            SoftCard {
+                Text("About this property", style = SoftType.cardTitle)
+                Text(listing.description, style = SoftType.bodyLight, color = SoftTextSoft, modifier = Modifier.padding(top = 10.dp))
             }
         }
 
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Pill(text = if (listing.listingType == "rent") "For rent" else "For sale")
-                Spacer(Modifier.size(8.dp))
-                Pill(
-                    text = Format.capitalize(listing.propertyType),
-                    background = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                )
+        listing.owner?.let { owner ->
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Listed by", style = SoftType.small, color = SoftSecondary, modifier = Modifier.padding(start = 8.dp))
+                PosterRow(owner, onClick = { onOpenProfile(owner.id) })
             }
-            Spacer(Modifier.height(12.dp))
-            Text(
-                Format.price(listing.price, listing.listingType),
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(listing.title, style = MaterialTheme.typography.titleLarge)
+        }
 
-            val address = listOfNotNull(
-                listing.address.ifBlank { null },
-                listing.city.ifBlank { null },
-                listing.state.ifBlank { null },
-                listing.zipCode.ifBlank { null },
-            ).joinToString(", ")
-            if (address.isNotBlank()) {
-                Spacer(Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Outlined.Place,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.size(4.dp))
-                    Text(
-                        address,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                    )
-                }
+        if (isMine) {
+            OwnerTools(listing, busy, onConfirm)
+        } else {
+            Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.Center) {
+                SoftLink("Report this listing", onClick = onReport, muted = true)
             }
-
-            // Trust comes before the sales copy.
-            Spacer(Modifier.height(16.dp))
-            TrustPanel(listing)
-            if (Format.isStale(listing.lastConfirmedAt, listing.createdAt)) {
-                Spacer(Modifier.height(8.dp))
-                StaleWarning()
-            }
-
-            Spacer(Modifier.height(16.dp))
-            FeatureRow(listing)
-
-            if (comparison != null && comparison.sampleSize >= 3) {
-                Spacer(Modifier.height(16.dp))
-                PriceComparisonCard(comparison)
-            }
-
-            if (listing.description.isNotBlank()) {
-                Spacer(Modifier.height(20.dp))
-                Text("About this property", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    listing.description,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                )
-            }
-
-            listing.owner?.let { owner ->
-                Spacer(Modifier.height(20.dp))
-                Text("Listed by", style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                PosterCard(owner = owner, onClick = { onOpenProfile(owner.id) })
-            }
-
-            Spacer(Modifier.height(24.dp))
-            if (isMine) {
-                if (listing.isFeatured) {
-                    Text(
-                        "Featured until ${Format.dateTime(listing.featuredUntil)}",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.tertiary,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                // Editing is the repair path for a flagged listing — the trust
-                // panel tells owners what to fix, so it has to be reachable.
-                PrimaryButton(
-                    text = "Edit listing",
-                    onClick = onEdit,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = onPromote,
-                    enabled = listing.verificationStatus == Verification.VERIFIED && !busy,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                ) {
-                    Text(if (listing.isFeatured) "Extend featuring" else "Feature this listing")
-                }
-                if (listing.verificationStatus != Verification.VERIFIED) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        "Only verified listings can be featured. Featuring buys placement, not a badge — so a listing has to pass screening first.",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.height(10.dp))
-                if (Format.isStale(listing.lastConfirmedAt, listing.createdAt)) {
-                    Text(
-                        "Buyers see a warning on listings that haven't been confirmed recently.",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                OutlinedButton(
-                    onClick = onConfirm,
-                    enabled = !busy,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                ) { Text("Confirm it's still available") }
-            } else {
-                PrimaryButton(
-                    text = "Message the poster",
-                    onClick = onMessage,
-                    loading = busy,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                )
-                Spacer(Modifier.height(10.dp))
-                OutlinedButton(
-                    onClick = onBook,
-                    enabled = !busy && listing.verificationStatus != Verification.REJECTED,
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                ) { Text("Request a viewing") }
-                Spacer(Modifier.height(6.dp))
-                TextButton(onClick = onReport, modifier = Modifier.fillMaxWidth()) {
-                    Text("Report this listing", color = MaterialTheme.colorScheme.error)
-                }
-            }
-            Spacer(Modifier.height(16.dp))
         }
     }
 }
 
-/** Answers "is this price reasonable?" — 46% of respondents asked for this. */
+@Composable
+private fun HeroCard(
+    listing: Listing, isMine: Boolean, busy: Boolean,
+    onMessage: () -> Unit, onBook: () -> Unit, onEdit: () -> Unit, onPromote: () -> Unit,
+) {
+    SoftCard {
+        Box(modifier = Modifier.fillMaxWidth().height(300.dp).clip(RoundedCornerShape(SoftRadius.image))) {
+            if (listing.images.isEmpty()) {
+                SoftPhotoPlaceholder(Modifier.fillMaxSize())
+                Text("No photos yet", style = SoftType.caption, color = SoftText.copy(alpha = 0.6f), modifier = Modifier.align(Alignment.Center).padding(top = 48.dp))
+            } else {
+                val pagerState = rememberPagerState(pageCount = { listing.images.size })
+                HorizontalPager(state = pagerState, modifier = Modifier.fillMaxSize()) { page ->
+                    NetworkImage(url = listing.images[page].url, contentDescription = listing.title, modifier = Modifier.fillMaxSize())
+                }
+                if (listing.images.size > 1) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 12.dp),
+                    ) {
+                        repeat(listing.images.size) { i ->
+                            Box(Modifier.size(7.dp).clip(CircleShape).background(Color.White.copy(alpha = if (i == pagerState.currentPage) 1f else 0.5f)))
+                        }
+                    }
+                }
+            }
+            PhotoTags(listing, modifier = Modifier.padding(14.dp))
+        }
+
+        Row(verticalAlignment = Alignment.Top, modifier = Modifier.padding(top = 22.dp)) {
+            Text(listing.title, style = SoftType.heading, modifier = Modifier.weight(1f))
+            Spacer(Modifier.width(12.dp))
+            OTag(if (listing.listingType == "rent") "For rent" else "For sale", filled = true, modifier = Modifier.padding(top = 6.dp))
+        }
+        Text(metaLine(listing), style = SoftType.small, color = SoftSecondary, modifier = Modifier.padding(top = 8.dp))
+
+        val address = listOf(listing.address, listing.city, listing.state, listing.zipCode).filter { it.isNotBlank() }.joinToString(", ")
+        if (address.isNotBlank()) {
+            Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+                Icon(Icons.Outlined.Place, contentDescription = null, tint = SoftSecondary, modifier = Modifier.size(16.dp))
+                Text(address, style = SoftType.caption, color = SoftSecondary)
+            }
+        }
+        if (Format.isStale(listing.lastConfirmedAt, listing.createdAt)) {
+            Text("The owner hasn't confirmed this is still available in over a month.", style = SoftType.caption, color = SoftClay, modifier = Modifier.padding(top = 8.dp))
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 20.dp)) {
+            SoftTile(Icons.Outlined.Sell, "Asking price", Format.compactPrice(listing.price) + if (listing.listingType == "rent") "/mo" else "", modifier = Modifier.weight(1f))
+            SoftTile(Icons.Outlined.VerifiedUser, "Trust score", listing.verificationScore.toString(), modifier = Modifier.weight(1f))
+        }
+
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.padding(top = 16.dp)) {
+            if (isMine) {
+                SoftPrimaryButton("Edit listing", onClick = onEdit, icon = Icons.Outlined.Edit, modifier = Modifier.weight(1f))
+                SoftSecondaryButton(
+                    if (listing.isFeatured) "Extend featuring" else "Feature it",
+                    onClick = onPromote, icon = Icons.Outlined.Star, tint = SoftTile,
+                    enabled = listing.verificationStatus == Verification.VERIFIED && !busy,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                SoftPrimaryButton(
+                    "Message ${listing.owner?.name?.split(" ")?.firstOrNull() ?: "poster"}",
+                    onClick = onMessage, loading = busy, modifier = Modifier.weight(1f),
+                )
+                SoftSecondaryButton("Book a viewing", onClick = onBook, tint = SoftTile, enabled = listing.verificationStatus != Verification.REJECTED, modifier = Modifier.weight(1f))
+            }
+        }
+    }
+}
+
+/** The trust panel: what the review concluded, why, and what it does not promise. */
+@Composable
+private fun TrustCard(listing: Listing) {
+    val status = listing.verificationStatus
+    val headline = when (status) {
+        Verification.VERIFIED -> "Screened and verified"
+        Verification.FLAGGED -> "Verified with warnings"
+        Verification.REJECTED -> "Failed screening"
+        Verification.PENDING -> "Being screened now"
+        else -> "Not screened yet"
+    }
+    val fill = when (status) {
+        Verification.VERIFIED -> SoftInk
+        Verification.FLAGGED -> SoftClay
+        Verification.REJECTED -> SoftRed
+        else -> SoftTile
+    }
+    val glyphTint = if (fill == SoftTile) SoftTextSoft else Color.White
+    val glyph = when (status) {
+        Verification.VERIFIED -> Icons.Outlined.Check
+        Verification.FLAGGED, Verification.REJECTED -> Icons.Outlined.Warning
+        else -> Icons.Outlined.Schedule
+    }
+
+    SoftCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(contentAlignment = Alignment.Center, modifier = Modifier.size(44.dp).clip(CircleShape).background(fill)) {
+                    Icon(glyph, contentDescription = null, tint = glyphTint, modifier = Modifier.size(20.dp))
+                }
+                Column {
+                    Text(headline, style = SoftType.cardTitle)
+                    Text("Trust score ${listing.verificationScore}/100 · screened", style = SoftType.footnote, color = SoftSecondary)
+                }
+            }
+            if (listing.verificationSummary.isNotBlank()) {
+                Text(listing.verificationSummary, style = SoftType.small, color = SoftTextSoft)
+            }
+            if (listing.verificationFlags.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listing.verificationFlags.take(3).forEach { OTag(Format.flagLabel(it)) }
+                }
+            }
+            if (listing.reportCount > 0) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Outlined.Flag, contentDescription = null, tint = SoftRed, modifier = Modifier.size(14.dp))
+                    Text("${listing.reportCount} user report${if (listing.reportCount == 1) "" else "s"} on this listing", style = soft(14, FontWeight.Normal), color = SoftRed)
+                }
+            }
+            // Say plainly what the badge does and does not mean.
+            Text(
+                "Screened automatically for scam and quality signals. A badge is not proof of ownership — view in person before paying anything.",
+                style = SoftType.footnote, color = SoftSecondary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun OwnerTools(listing: Listing, busy: Boolean, onConfirm: () -> Unit) {
+    SoftCard {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Keep it fresh", style = SoftType.cardTitle)
+            if (listing.isFeatured) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Icon(Icons.Outlined.Star, contentDescription = null, tint = SoftTextSoft, modifier = Modifier.size(14.dp))
+                    Text("Featured until ${Format.dateTime(listing.featuredUntil)}", style = soft(14, FontWeight.Normal), color = SoftTextSoft)
+                }
+            }
+            if (listing.verificationStatus != Verification.VERIFIED) {
+                Text("Only verified listings can be featured. Featuring buys placement, not a badge — so a listing has to pass screening first.", style = SoftType.footnote, color = SoftSecondary)
+            }
+            Text(
+                if (Format.isStale(listing.lastConfirmedAt, listing.createdAt)) "Buyers are shown a warning on listings that haven't been confirmed recently."
+                else "Confirming availability keeps the stale warning off your listing.",
+                style = SoftType.footnote, color = SoftSecondary,
+            )
+            SoftSecondaryButton("Confirm it's still available", onClick = onConfirm, icon = Icons.Outlined.Check, tint = SoftTile, loading = busy, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+/** Owner / agent row on the listing detail screen. */
+@Composable
+fun PosterRow(owner: UserSummary, onClick: () -> Unit) {
+    SoftRow(onClick = onClick) {
+        SoftAvatarView(owner.name, size = 44.dp)
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.weight(1f)) {
+            Text(owner.name, style = SoftType.body)
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (owner.isVerified) VTag("Verified") else OTag("Not verified")
+                if (owner.isAgent) OTag("Agent")
+                if (owner.ratingCount > 0) OTag("★ %.1f · %d".format(owner.ratingAvg, owner.ratingCount))
+            }
+        }
+        SoftChevron()
+    }
+}
+
+/** Answers "is this price reasonable?" — 46% of respondents asked for exactly this. */
 @Composable
 private fun PriceComparisonCard(comparison: PriceComparison) {
-    val tint = when (comparison.verdict) {
-        "below_market" -> MaterialTheme.colorScheme.primary
-        "above_market" -> MaterialTheme.colorScheme.tertiary
-        else -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
     val difference = when {
-        kotlin.math.abs(comparison.percentDiff) < 1 -> "right at"
+        abs(comparison.percentDiff) < 1 -> "right at"
         comparison.percentDiff > 0 -> "%.0f%% above".format(comparison.percentDiff)
         else -> "%.0f%% below".format(-comparison.percentDiff)
     }
-
-    Column(
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(14.dp),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Price check", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+    SoftCard {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Price check", style = SoftType.cardTitle, modifier = Modifier.weight(1f))
+                if (comparison.verdict == "below_market") VTag(comparison.verdictLabel) else OTag(comparison.verdictLabel)
+            }
             Text(
-                comparison.verdictLabel,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = tint,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(50))
-                    .background(tint.copy(alpha = 0.15f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                "Compared with ${comparison.sampleSize} similar listings nearby, this is $difference the median of ${Format.compactPrice(comparison.median)}.",
+                style = SoftType.small, color = SoftTextSoft,
             )
-        }
-        Text(
-            "Compared with ${comparison.sampleSize} similar listings nearby, this is $difference the median of ${Format.compactPrice(comparison.median)}.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Row {
-            Text(
-                Format.compactPrice(comparison.min),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.weight(1f),
-            )
-            Text(
-                Format.compactPrice(comparison.max),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.outline,
-            )
+            val span = (comparison.max - comparison.min).coerceAtLeast(1)
+            val ratio = ((comparison.price - comparison.min).toFloat() / span).coerceIn(0f, 1f)
+            Box(modifier = Modifier.fillMaxWidth().height(14.dp)) {
+                Box(Modifier.align(Alignment.CenterStart).fillMaxWidth().height(8.dp).clip(CircleShape).background(SoftTile))
+                Box(Modifier.align(Alignment.CenterStart).fillMaxWidth(ratio.coerceAtLeast(0.04f))) {
+                    Box(Modifier.align(Alignment.CenterEnd).size(14.dp).clip(CircleShape).background(SoftInk))
+                }
+            }
+            Row {
+                Text(Format.compactPrice(comparison.min), style = SoftType.footnote, color = SoftSecondary, modifier = Modifier.weight(1f))
+                Text(Format.compactPrice(comparison.max), style = SoftType.footnote, color = SoftSecondary)
+            }
         }
     }
 }
@@ -462,27 +449,15 @@ private fun ReportDialog(onDismiss: () -> Unit, onSubmit: (String, String) -> Un
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 reportReasons.forEach { (value, label) ->
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         RadioButton(selected = reason == value, onClick = { reason = value })
                         Text(label, style = MaterialTheme.typography.bodyMedium)
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = details,
-                    onValueChange = { details = it },
-                    label = { Text("Optional details") },
-                    minLines = 2,
-                )
+                OutlinedTextField(value = details, onValueChange = { details = it }, label = { Text("Optional details") }, minLines = 2)
                 Spacer(Modifier.height(8.dp))
-                Text(
-                    "Reports go to our moderators. Three open reports send a listing back for re-screening automatically.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Text("Reports go to our moderators. Three open reports send a listing back for re-screening automatically.", style = MaterialTheme.typography.labelSmall, color = SoftSecondary)
             }
         },
         confirmButton = { TextButton(onClick = { onSubmit(reason, details) }) { Text("Submit") } },
@@ -490,88 +465,13 @@ private fun ReportDialog(onDismiss: () -> Unit, onSubmit: (String, String) -> Un
     )
 }
 
-/** Booking a viewing — 57% asked for in-app scheduling. */
-@Composable
-private fun BookViewingDialog(onDismiss: () -> Unit, onSubmit: (Long, Int, String) -> Unit) {
-    var days by remember { mutableFloatStateOf(1f) }
-    var hour by remember { mutableFloatStateOf(14f) }
-    var note by remember { mutableStateOf("") }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Request a viewing") },
-        text = {
-            Column {
-                Text("In ${days.toInt()} day(s), at ${hour.toInt()}:00", style = MaterialTheme.typography.labelLarge)
-                Slider(value = days, onValueChange = { days = it }, valueRange = 1f..30f)
-                Slider(value = hour, onValueChange = { hour = it }, valueRange = 7f..20f)
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = { Text("Note for the poster") },
-                    minLines = 2,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "The poster has to accept before it's confirmed. Never pay anything before you've seen the property.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSubmit(days.toLong(), hour.toInt(), note) }) { Text("Request") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
-    )
-}
-
-@Composable
-private fun FeatureRow(listing: Listing) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 14.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-        ) {
-            Feature(value = Format.beds(listing.bedrooms), label = "Bedrooms")
-            Feature(value = Format.baths(listing.bathrooms), label = "Bathrooms")
-            Feature(value = Format.area(listing.areaSqft), label = "Area")
-        }
-    }
-}
-
-@Composable
-private fun Feature(value: String, label: String) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(value, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-        )
-    }
-}
-
-
 /**
  * Buying promoted placement for a listing you own. Featured listings were the
- * survey's one unanimous supply-side ask — every agent picked it (6/6), and 58%
- * of owners did. Sold per listing, since most posters here have one property.
+ * survey's one unanimous supply-side ask. Sold per listing, since most posters
+ * here have one property.
  */
 @Composable
-private fun PromoteDialog(
-    plans: List<FeaturePlan>,
-    note: String,
-    busy: Boolean,
-    onDismiss: () -> Unit,
-    onSubmit: (String) -> Unit,
-) {
+private fun PromoteDialog(plans: List<FeaturePlan>, note: String, busy: Boolean, onDismiss: () -> Unit, onSubmit: (String) -> Unit) {
     var selected by remember(plans) { mutableStateOf(plans.firstOrNull()?.id) }
 
     AlertDialog(
@@ -583,43 +483,26 @@ private fun PromoteDialog(
                     Text("Loading packages…", style = MaterialTheme.typography.bodyMedium)
                 } else {
                     plans.forEach { plan ->
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                             RadioButton(selected = selected == plan.id, onClick = { selected = plan.id })
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(plan.label, style = MaterialTheme.typography.bodyMedium)
-                                Text(
-                                    "${plan.days} days of promoted placement",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Text("${plan.days} days of promoted placement", style = MaterialTheme.typography.labelSmall, color = SoftSecondary)
                             }
-                            Text(
-                                Format.price(plan.price, "sale"),
-                                style = MaterialTheme.typography.titleSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
+                            Text(Format.price(plan.price, "sale"), style = MaterialTheme.typography.titleSmall)
                         }
                     }
                 }
                 if (note.isNotBlank()) {
                     Spacer(Modifier.height(8.dp))
-                    Text(
-                        note,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Text(note, style = MaterialTheme.typography.labelSmall, color = SoftSecondary)
                 }
             }
         },
-        confirmButton = {
-            TextButton(
-                onClick = { selected?.let(onSubmit) },
-                enabled = selected != null && !busy,
-            ) { Text("Continue") }
-        },
+        confirmButton = { TextButton(onClick = { selected?.let(onSubmit) }, enabled = selected != null && !busy) { Text("Continue") } },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
     )
 }
+
+@Suppress("unused")
+private val keep = Modifier.softClick {}

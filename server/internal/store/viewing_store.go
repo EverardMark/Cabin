@@ -22,8 +22,11 @@ const viewingColumns = `id, listing_id, requester_id, owner_id, scheduled_for, s
 // Create records a new viewing request.
 func (s *ViewingStore) Create(v *models.ViewingRequest) error {
 	now := time.Now().UTC()
-	v.CreatedAt = now
-	v.UpdatedAt = now
+	if v.CreatedAt.IsZero() { // seed data sets its own timeline
+		v.CreatedAt = now
+	}
+	v.UpdatedAt = v.CreatedAt
+	now = v.CreatedAt
 	if v.Status == "" {
 		v.Status = "requested"
 	}

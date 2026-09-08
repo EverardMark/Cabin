@@ -170,7 +170,9 @@ func (s *ChatStore) Messages(conversationID string, limit int) ([]models.Message
 
 // Send appends a message and bumps the conversation's activity timestamp.
 func (s *ChatStore) Send(m *models.Message) error {
-	m.CreatedAt = time.Now().UTC()
+	if m.CreatedAt.IsZero() { // seed data sets its own timeline
+		m.CreatedAt = time.Now().UTC()
+	}
 	stamp := m.CreatedAt.Format(time.RFC3339)
 	if _, err := s.db.Exec(
 		`INSERT INTO messages (id, conversation_id, sender_id, body, read_at, created_at)

@@ -6,6 +6,7 @@ import SwiftUI
 struct UserProfileView: View {
     let userId: String
     @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
 
     @State private var profile: PublicProfile?
     @State private var reviews: [Review] = []
@@ -14,30 +15,38 @@ struct UserProfileView: View {
     @State private var showReviewSheet = false
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                if loading {
-                    ProgressView().frame(maxWidth: .infinity).padding(.top, 40)
-                } else if let profile {
-                    header(profile)
-                    if !profile.bio.isEmpty {
-                        Text(profile.bio)
-                            .font(.subheadline)
-                            .foregroundStyle(.primary.opacity(0.85))
-                    }
-                    reviewsSection(profile)
-                } else {
-                    ContentUnavailableView(
-                        "Couldn't load profile",
-                        systemImage: "person.slash",
-                        description: Text(errorMessage ?? "")
-                    )
-                }
+        VStack(spacing: 0) {
+            SoftHeader {
+                CircleButton(systemImage: "chevron.left") { dismiss() }
+            } title: {
+                Text(profile?.name ?? "Profile").font(.softScreenTitle).lineLimit(1).padding(.horizontal, 60)
+            } trailing: {
+                Color.clear.frame(width: 48, height: 48)
             }
-            .padding(16)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 14) {
+                    if loading {
+                        ProgressView().tint(Color.softInk).frame(maxWidth: .infinity).padding(.top, 40)
+                    } else if let profile {
+                        header(profile)
+                        if !profile.bio.isEmpty {
+                            SoftCard {
+                                Text(profile.bio).font(.soft(16)).foregroundStyle(Color.softTextSoft)
+                            }
+                        }
+                        reviewsSection(profile)
+                    } else {
+                        SoftEmpty(systemImage: "person.slash", title: "Couldn't load profile", message: errorMessage ?? "")
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 48)
+            }
         }
-        .navigationTitle(profile?.name ?? "Profile")
-        .navigationBarTitleDisplayMode(.inline)
+        .softScreen()
+        .hidesSoftTabBar()
         .sheet(isPresented: $showReviewSheet) {
             LeaveReviewSheet(userId: userId, userName: profile?.name ?? "") {
                 await load()
@@ -47,75 +56,77 @@ struct UserProfileView: View {
     }
 
     private func header(_ profile: PublicProfile) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 14) {
-                ZStack {
-                    Circle().fill(Color.cabinForest.opacity(0.15))
-                    Text(initials(profile.name)).font(.title2.bold()).foregroundStyle(Color.cabinForest)
-                }
-                .frame(width: 64, height: 64)
-
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        Text(profile.name).font(.title3.weight(.semibold))
-                        if profile.isAgent { AgentBadge() }
+        SoftCard {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 16) {
+                    SoftAvatar(name: profile.name, size: 72)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(profile.name).font(.softScreenTitle).lineLimit(1)
+                        Text(profile.isAgent ? "Real estate agent" : "Member since \(memberSince(profile))")
+                            .font(.softSmall).foregroundStyle(Color.softSecondary)
+                        HStack(spacing: 6) {
+                            if profile.verificationStatus == .verified {
+                                VTag(text: "Account verified")
+                            } else {
+                                OTag(text: "Not verified")
+                            }
+                            if profile.ratingCount > 0 {
+                                OTag(text: String(format: "★ %.1f · %d", profile.ratingAvg, profile.ratingCount))
+                            }
+                        }
+                        .padding(.top, 4)
                     }
-                    VerificationBadge(status: profile.verificationStatus)
-                    RatingStars(rating: profile.ratingAvg, count: profile.ratingCount)
                 }
-                Spacer()
-            }
-
-            if profile.verificationStatus != .verified {
-                Label("This account hasn't completed identity verification.",
-                      systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(Color.cabinClay)
+                if profile.verificationStatus != .verified {
+                    Text("This account hasn't completed identity verification. View in person before paying anything.")
+                        .font(.soft(13)).foregroundStyle(Color.softClay)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         }
+    }
+
+    private func memberSince(_ profile: PublicProfile) -> String {
+        Format.date(from: profile.createdAt)?.formatted(.dateTime.month(.abbreviated).year()) ?? "—"
     }
 
     @ViewBuilder
     private func reviewsSection(_ profile: PublicProfile) -> some View {
         HStack {
-            Text("Reviews").font(.headline)
+            Text("Reviews").font(.softSmall).foregroundStyle(Color.softSecondary)
             Spacer()
             if profile.id != appState.currentUser?.id {
-                Button("Write a review") { showReviewSheet = true }
-                    .font(.subheadline)
+                SoftLink(title: "Write a review") { showReviewSheet = true }
             }
         }
-        .padding(.top, 4)
+        .padding(.horizontal, 8)
+        .padding(.top, 6)
 
         if reviews.isEmpty {
             Text("No reviews yet. Reviews can only be written by someone who completed a viewing with this person.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
+                .font(.soft(14)).foregroundStyle(Color.softSecondary)
+                .padding(.horizontal, 8)
         } else {
             ForEach(reviews) { review in
-                VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        RatingStars(rating: Double(review.rating), count: 1)
-                        Spacer()
-                        Text(Format.relative(review.createdAt))
-                            .font(.caption2).foregroundStyle(.tertiary)
+                SoftRow {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack {
+                            Text(String(repeating: "★", count: max(1, min(5, review.rating))))
+                                .font(.soft(14, .regular)).foregroundStyle(Color.softText)
+                            Spacer()
+                            Text(Format.relative(review.createdAt)).font(.soft(12)).foregroundStyle(Color.softMuted)
+                        }
+                        if !review.comment.isEmpty {
+                            Text(review.comment).font(.soft(15)).foregroundStyle(Color.softTextSoft)
+                        }
+                        if let author = review.author {
+                            Text("— \(author.name)").font(.soft(13)).foregroundStyle(Color.softSecondary)
+                        }
                     }
-                    if !review.comment.isEmpty {
-                        Text(review.comment).font(.footnote)
-                    }
-                    if let author = review.author {
-                        Text("— \(author.name)").font(.caption).foregroundStyle(.secondary)
-                    }
+                    .padding(6)
                 }
-                .padding(12)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
             }
         }
-    }
-
-    private func initials(_ name: String) -> String {
-        name.split(separator: " ").prefix(2).compactMap { $0.first.map(String.init) }.joined().uppercased()
     }
 
     private func load() async {

@@ -62,6 +62,43 @@ object Format {
     fun dateTime(raw: String?): String =
         instant(raw)?.let { dateTimeFormatter.format(it) } ?: "—"
 
+    /** "+63 917 555 0134" → "+63 917 ••• 0134". */
+    fun maskedPhone(phone: String): String {
+        val digits = phone.filter { it.isDigit() }
+        if (digits.length <= 7) return phone
+        val tail = digits.takeLast(4)
+        val head = digits.dropLast(7)
+        return when {
+            head.startsWith("63") && head.length == 5 -> "+63 ${head.drop(2)} ••• $tail"
+            head.startsWith("0") && head.length == 4 -> "$head ••• $tail"
+            else -> "+$head ••• $tail"
+        }
+    }
+
+    private val timeFormatter: DateTimeFormatter =
+        DateTimeFormatter.ofPattern("h:mm a", locale).withZone(ZoneId.systemDefault())
+
+    /** "10:00 AM" */
+    fun time(raw: String?): String = instant(raw)?.let { timeFormatter.format(it) } ?: ""
+
+    /** "12" and "Sep" for the date tile on a viewing row. */
+    fun dayAndMonth(raw: String?): Pair<String, String> {
+        val i = instant(raw) ?: return "—" to ""
+        val zoned = i.atZone(ZoneId.systemDefault())
+        return zoned.dayOfMonth.toString() to DateTimeFormatter.ofPattern("MMM", locale).format(zoned)
+    }
+
+    /** Days since the owner last confirmed the listing: "today", "3d", "2mo". */
+    fun confirmedAgo(lastConfirmedAt: String?, createdAt: String?): String {
+        val reference = instant(lastConfirmedAt) ?: instant(createdAt) ?: return "—"
+        val days = Duration.between(reference, Instant.now()).toDays()
+        return when {
+            days <= 0 -> "today"
+            days < 30 -> "${days}d"
+            else -> "${days / 30}mo"
+        }
+    }
+
     /** "2h ago", "3d ago" — for chat lists and listing freshness. */
     fun relative(raw: String?): String {
         val then = instant(raw) ?: return ""

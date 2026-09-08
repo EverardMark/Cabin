@@ -56,6 +56,16 @@ class CabinRepository(
     private val _summary = MutableStateFlow(HomeSummary())
     val summary: StateFlow<HomeSummary> = _summary.asStateFlow()
 
+    /**
+     * True between registering and finishing sign-up (confirm number, then
+     * "Start browsing"). The root keeps the onboarding screens up while this
+     * is set even though the account is already signed in.
+     */
+    private val _onboarding = MutableStateFlow(false)
+    val onboarding: StateFlow<Boolean> = _onboarding.asStateFlow()
+
+    fun finishOnboarding() { _onboarding.value = false }
+
     /** Load any persisted session into memory. Call once at startup. */
     suspend fun bootstrap() {
         session.load()
@@ -76,6 +86,7 @@ class CabinRepository(
         role: String,
     ): Result<User> = runCatching {
         val res = api.register(RegisterRequest(email.trim(), password, name.trim(), phone.trim(), role))
+        _onboarding.value = true
         persist(res.token to res.user)
     }
 
@@ -95,6 +106,7 @@ class CabinRepository(
         session.clear()
         _user.value = null
         _summary.value = HomeSummary()
+        _onboarding.value = false
     }
 
     suspend fun refreshUser(): Result<User> = runCatching {

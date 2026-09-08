@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log"
 	"net/http"
 	"os"
@@ -57,6 +58,9 @@ func runViewingMaintenance(ctx context.Context, viewings *store.ViewingStore) {
 }
 
 func main() {
+	reseed := flag.Bool("reseed", false, "wipe every table, load the demo data set, and exit without serving")
+	flag.Parse()
+
 	cfg := config.Load()
 
 	// For sqlite the DSN is a file path; for mysql it's a full DSN string.
@@ -100,8 +104,28 @@ func main() {
 	}
 	worker := verify.NewWorker(verifier, listings, users)
 
+	stores := seed.Stores{
+		Users: users, Listings: listings, Chat: chat,
+		Viewings: viewings, Reviews: reviews, Searches: searches,
+	}
+	if *reseed {
+		// A demo/staging reset: everything goes, the mock data set comes back.
+		// Refuse on production unless SEED is explicitly on, so a stray flag
+		// can't empty a live database.
+		if !cfg.Seed {
+			log.Fatal("refusing to reseed: SEED is off (set SEED=true to allow on this environment)")
+		}
+		if err := database.Reset(db); err != nil {
+			log.Fatalf("reset database: %v", err)
+		}
+		if err := seed.Run(stores); err != nil {
+			log.Fatalf("seed data: %v", err)
+		}
+		log.Println("reseed complete; start the server normally to have the worker screen the listings")
+		return
+	}
 	if cfg.Seed {
-		if err := seed.Run(users, listings); err != nil {
+		if err := seed.Run(stores); err != nil {
 			log.Fatalf("seed data: %v", err)
 		}
 	}

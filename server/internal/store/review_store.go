@@ -19,7 +19,9 @@ func NewReviewStore(db *sql.DB) *ReviewStore { return &ReviewStore{db: db} }
 // Create records a review. A user may review another user only once; the
 // unique index turns a second attempt into ErrDuplicate.
 func (s *ReviewStore) Create(r *models.Review) error {
-	r.CreatedAt = time.Now().UTC()
+	if r.CreatedAt.IsZero() { // seed data sets its own timeline
+		r.CreatedAt = time.Now().UTC()
+	}
 	_, err := s.db.Exec(
 		`INSERT INTO reviews (id, subject_user_id, author_id, listing_id, rating, comment, created_at)
 		 VALUES (?,?,?,?,?,?,?)`,
